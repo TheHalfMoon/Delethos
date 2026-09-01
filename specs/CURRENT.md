@@ -8,8 +8,11 @@
 **Specification 001 implementation merge:** `9bdba350458fe2e7832658e3214d9a500dd7153e`  
 **Specification 001 terminal closeout merge:** `6c8ac8b51e96099912631607218b00aa85492e38`  
 **Specification 001 post-closeout CI:** `33501812656` — `SUCCESS` on Linux/macOS/Windows  
+**Specification 002 activation merge:** `39b10c6585f6201bb22ab2620013f6e1b76396ab`  
+**Specification 002 activation CI:** `33502613669` — `SUCCESS` on Linux/macOS/Windows  
 **State represented by this file when canonical:** `SPEC_002_ACTIVE`  
-**Active product specification when canonical:** `specs/002-worktree-process-supervision/spec.md`
+**Active product specification when canonical:** `specs/002-worktree-process-supervision/spec.md`  
+**Normative Specification 002 amendment:** `specs/002-worktree-process-supervision/amendment-001-git-execution-safety.md`
 
 Live GitHub/repository truth overrides this file.
 
@@ -27,16 +30,19 @@ Specification 001 closure is machine-observed because:
 
 ## Specification 002 authority
 
-When this file and `specs/002-worktree-process-supervision/` are canonical together, Specification 002 is the sole active product implementation authority.
+Specification 002 is active at canonical activation merge `39b10c6585f6201bb22ab2620013f6e1b76396ab`, whose push CI run `33502613669` completed successfully on Linux, macOS, and Windows.
+
+When this file and Amendment 001 are canonical together, the amendment is normative and supersedes conflicting earlier Specification 002 wording about Git checkout/status execution safety.
 
 ```text
 PROGRAM_STATUS = SPEC_002_ACTIVE
 ACTIVE_PRODUCT_SPEC = specs/002-worktree-process-supervision/spec.md
+NORMATIVE_AMENDMENT = specs/002-worktree-process-supervision/amendment-001-git-execution-safety.md
 PRODUCT_IMPLEMENTATION_AUTHORITY = SPEC_002_BOUNDED_RUNTIME_ONLY
 NEXT_ALLOWED_WORK = SPEC_002_TASK_ORDER_ONLY
 ```
 
-Specification 002 authorizes only the exact-base Git worktree and shell-free process-supervision surface named by its specification/plan.
+Specification 002 authorizes only the exact-base Git worktree and shell-free process-supervision surface named by its specification/plan, subject to the stricter Git-execution rules in Amendment 001.
 
 ## Specification 002 implementation surface
 
@@ -64,7 +70,13 @@ Any additional product path requires a prior canonical Specification 002 plan am
 - worktrees are detached at an exact commit and locked with Delethos ownership provenance;
 - worktree isolation is never represented as a security sandbox;
 - dirty owned worktrees are preserved rather than force-removed;
-- repository discovery executes no repository code;
+- repository discovery/worktree lifecycle must not intentionally execute repository-configured hooks, external clean/smudge/process filter commands, or external fsmonitor hooks;
+- inherited `GIT_*` control variables are removed before runtime Git spawn and `GIT_TERMINAL_PROMPT=0` is set;
+- every runtime Git command disables `core.fsmonitor` command-scoped;
+- `git worktree add` uses a fresh empty Delethos-owned `core.hooksPath` so `post-checkout` is not executed;
+- configured external filter drivers observed immediately before relevant operations are command-scoped disabled for `clean`, `smudge`, and `process`, with `required=false`;
+- suppressed filter-driver names are exposed as runtime facts and filtered/hydrated checkout equivalence is not claimed;
+- concurrent hostile repository-config mutation is a residual limitation, not a solved containment problem;
 - child execution uses direct executable/argument vectors with `shell: false`;
 - environment inheritance is explicit rather than accidental;
 - `CANCELLED`, `TIMED_OUT`, and stdio-inactivity `STALLED` remain distinct;
@@ -85,7 +97,9 @@ Specification 002 does not authorize:
 - routing/memory/bench;
 - cloud/telemetry;
 - automatic commit/push/merge/release;
+- arbitrary Git hook/filter execution or Git LFS/network hydration;
 - a sandbox or perfect process-containment claim;
+- protection against concurrent hostile repository-config mutation;
 - public package/release publication;
 - stable external `delethos.*.v1` claims.
 
@@ -95,4 +109,4 @@ At activation shaping time, `main` is not branch-protected and no repository rul
 
 ## Continuation
 
-Implement Specification 002 in task order only after this shaping unit qualifies, merges with expected-head protection, and canonical `main` is re-read. Do not begin Specification 003 from the roadmap until Specification 002 is closed canonically and fresh successor shaping is justified.
+Do not begin product implementation from the original activation alone. First qualify and merge the exact Git-execution safety amendment, then re-read canonical `main`. After that, implement Specification 002 in task order under the amended invariants. Do not begin Specification 003 from the roadmap until Specification 002 is closed canonically and fresh successor shaping is justified.
