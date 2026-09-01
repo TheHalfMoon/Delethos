@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assessGold, BASELINE_GOLD_CASES, makeConformanceRecord } from '../src/index.ts';
+import { assessGold, BASELINE_GOLD_CASES, CODEX_DEFINITION, makeConformanceRecord } from '../src/index.ts';
 
 const sha = 'a'.repeat(40);
 const emptyDiffDigest = '0'.repeat(64);
@@ -31,7 +31,7 @@ function record(
     : 'WRITE' as const;
   return makeConformanceRecord({
     source,
-    adapterImplementationVersion: overrides.adapterImplementationVersion ?? '0.0.0-candidate.1',
+    adapterImplementationVersion: overrides.adapterImplementationVersion ?? CODEX_DEFINITION.implementationVersion,
     adapterId: 'openai-codex-cli',
     delethosRevision: overrides.delethosRevision ?? sha,
     executablePath: overrides.executablePath ?? (missingBinary ? null : '/fixture/codex'),
@@ -92,7 +92,7 @@ test('mixed CLI versions on one platform block Gold', () => {
 
 test('mixed adapter implementation versions on one platform block Gold', () => {
   const records = ['linux', 'macos', 'windows'].flatMap((platform) => BASELINE_GOLD_CASES.map((caseId) => record('REAL_CLI', platform as 'linux' | 'macos' | 'windows', caseId)));
-  const mixed = records.map((value) => value.platform === 'linux' && value.caseId === 'write-success' ? { ...value, adapterImplementationVersion: '0.0.0-candidate.2' } : value);
+  const mixed = records.map((value) => value.platform === 'linux' && value.caseId === 'write-success' ? { ...value, adapterImplementationVersion: 'spec003-candidate.other' } : value);
   const assessment = assessGold('openai-codex-cli', sha, mixed);
   assert.equal(assessment.eligible, false);
   assert.ok(assessment.missing.includes('linux:adapter-implementation-version-consistency'));
@@ -129,7 +129,7 @@ test('conformance record is exact-revision, implementation-bound, Git-fact carry
     limitations: ['ANTHROPIC_API_KEY=othersecret'],
   });
   assert.equal(value.schema, 'delethos.adapter-conformance.candidate.3');
-  assert.equal(value.adapterImplementationVersion, '0.0.0-candidate.1');
+  assert.equal(value.adapterImplementationVersion, CODEX_DEFINITION.implementationVersion);
   assert.equal(value.detail?.includes('supersecret'), false);
   assert.equal(value.detail?.includes('abcdefghijklmnop'), false);
   assert.equal(value.limitations[0]?.includes('othersecret'), false);
@@ -176,7 +176,7 @@ test('real conformance runner emits bounded candidate.3 evidence to stdout witho
     facts: { headUnchanged: boolean; refsUnchanged: boolean; gitBaseBefore: string; gitDiffSha256: string };
   };
   assert.equal(recordValue.schema, 'delethos.adapter-conformance.candidate.3');
-  assert.equal(recordValue.adapterImplementationVersion, '0.0.0-candidate.1');
+  assert.equal(recordValue.adapterImplementationVersion, CODEX_DEFINITION.implementationVersion);
   assert.equal(recordValue.caseId, 'missing-binary');
   assert.equal(recordValue.source, 'REAL_CLI');
   assert.equal(recordValue.outcome, 'PASS');
