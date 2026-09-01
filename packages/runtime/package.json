@@ -1,0 +1,5 @@
+{
+  "name": "@delethos/runtime",
+  "private": true,
+  "type": "module"
+}
