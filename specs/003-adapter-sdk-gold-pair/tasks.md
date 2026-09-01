@@ -12,8 +12,8 @@
 SPEC_003_STATUS = ACTIVE_BLOCKED_REAL_GOLD
 CANONICAL_IMPLEMENTATION_REVISION = 05ab40fa224f046c6139d52ce4421579d94b5593
 CANONICAL_POST_MERGE_CI = 33529134266
-CANONICAL_GOVERNANCE_REVISION = 5bdea9040cb6f996012d5df696ae085cabc4480d
-CANONICAL_GOVERNANCE_POST_MERGE_CI = 33554243167
+CANONICAL_GOVERNANCE_REVISION = 5ee580bf73ac602da323a07b70f862647c282fb2
+CANONICAL_GOVERNANCE_POST_MERGE_CI = 33559051578
 DETERMINISTIC_MATRIX = linux:PASS macos:PASS windows:PASS
 LATEST_EXACT_HEAD_TEST_SUITE = 103/103 PASS
 REAL_GOLD_TRACKER = issue #16
@@ -22,13 +22,17 @@ CODEX_HOSTED_NOAUTH_RUN = 33553753394
 CODEX_HOSTED_NOAUTH_CASES = missing-binary:PASS discovery-version:PASS platform-launch:PASS
 CODEX_HOSTED_NOAUTH_MATRIX = linux/x64:PASS macos/arm64:PASS windows/x64:PASS
 CODEX_GOLD = NOT_QUALIFIED
-CLAUDE_HOSTED_NOAUTH = BLOCKED_VENDOR_AUTHORITY_NOT_ESTABLISHED
+CLAUDE_VENDOR_USE_AUTHORITY = NOT_ESTABLISHED_IN_CANONICAL_EVIDENCE
+CLAUDE_HOSTED_NOAUTH = PROHIBITED_WHILE_GATE_UNSATISFIED
+CLAUDE_RELEASE_PROVENANCE_GATE = SIGNED_MANIFEST_PLUS_FRESH_OFFICIAL_FINGERPRINT_REQUIRED_BEFORE_ANY_FUTURE_EXECUTION
 CLAUDE_GOLD = NOT_QUALIFIED
 ```
 
 Phases S–G and J are canonically complete. Phases H and I require real machine-observed vendor-CLI evidence across the required platform matrix. Phase K remains blocked until both candidates genuinely satisfy the Gold gate. Missing executables, credentials, vendor access, or platform environments remain `UNAVAILABLE`/`UNVERIFIED`; ordinary founder approval does not substitute for them.
 
-Canonical hosted Codex run `33553753394` establishes only the real no-auth subset recorded in `evidence-hosted-codex-noauth-2026-09-01.md`. It does not complete **D003-T101** because invalid/missing-auth behavior was not run, does not satisfy **D003-T112** through **D003-T114** because the complete claimed Gold surface remains unqualified, and does not promote Codex. Claude hosted installation/execution remains outside current canonical authority because the proprietary vendor-agreement prerequisite is not established in canonical project evidence; public installation documentation does not substitute for that external prerequisite.
+Canonical hosted Codex run `33553753394` establishes only the real no-auth subset recorded in `evidence-hosted-codex-noauth-2026-09-01.md`. It does not complete **D003-T101** because invalid/missing-auth behavior was not run, does not satisfy **D003-T112** through **D003-T114** because the complete claimed Gold surface remains unqualified, and does not promote Codex.
+
+Canonical Specification 003 Amendment 003 at `5ee580bf73ac602da323a07b70f862647c282fb2`, with post-merge deterministic run `33559051578` successful on Linux/macOS/Windows, establishes the fail-closed Claude hosted-qualification authority boundary. It does not establish that the repository owner lacks a vendor agreement; it records only that canonical project evidence available to this qualification context does not establish authority to install or execute Claude Code in hosted Specification 003 qualification. Any future hosted Claude execution requires a canonical non-secret authority evidence reference, exact hosted-Specification-003 scope, non-revoked current status, immediate pre-execution revalidation, fresh official release/signing facts, authenticated detached-manifest verification, and artifact/executable integrity verification. No Phase I checkbox is promoted by this governance evidence, and public release/install documentation remains shaping/provenance evidence rather than runtime qualification.
 
 ## Phase S — Successor shaping
 
