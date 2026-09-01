@@ -8,8 +8,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --test packages/core/test/canonical.test.ts packages/core/test/policy.test.ts packages/core/test/run.test.ts packages/core/test/evidence.test.ts",
-    "check:runtime-deps": "node -e \"const p=require('./packages/core/package.json'); const d=Object.keys(p.dependencies||{}); if(d.length){console.error('runtime dependencies are forbidden:',d.join(',')); process.exit(1)}\"",
+    "test": "node --test packages/core/test/canonical.test.ts packages/core/test/policy.test.ts packages/core/test/run.test.ts packages/core/test/evidence.test.ts packages/runtime/test/git.test.ts packages/runtime/test/worktree.test.ts packages/runtime/test/process.test.ts",
+    "check:runtime-deps": "node -e \"for (const p of ['./packages/core/package.json','./packages/runtime/package.json']) { const d=Object.keys(require(p).dependencies||{}); if(d.length){console.error('runtime dependencies are forbidden in '+p+': '+d.join(',')); process.exit(1)} }\"",
     "check": "pnpm typecheck && pnpm test && pnpm check:runtime-deps"
   },
   "devDependencies": {

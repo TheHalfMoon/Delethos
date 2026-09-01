@@ -12,5 +12,10 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["packages/core/src/**/*.ts", "packages/core/test/**/*.ts"]
+  "include": [
+    "packages/core/src/**/*.ts",
+    "packages/core/test/**/*.ts",
+    "packages/runtime/src/**/*.ts",
+    "packages/runtime/test/**/*.ts"
+  ]
 }

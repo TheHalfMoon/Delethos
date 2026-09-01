@@ -17,6 +17,8 @@ importers:
 
   packages/core: {}
 
+  packages/runtime: {}
+
 packages:
 
   '@types/node@24.13.3':
