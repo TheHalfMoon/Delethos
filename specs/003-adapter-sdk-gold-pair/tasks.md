@@ -12,14 +12,23 @@
 SPEC_003_STATUS = ACTIVE_BLOCKED_REAL_GOLD
 CANONICAL_IMPLEMENTATION_REVISION = 05ab40fa224f046c6139d52ce4421579d94b5593
 CANONICAL_POST_MERGE_CI = 33529134266
+CANONICAL_GOVERNANCE_REVISION = 5bdea9040cb6f996012d5df696ae085cabc4480d
+CANONICAL_GOVERNANCE_POST_MERGE_CI = 33554243167
 DETERMINISTIC_MATRIX = linux:PASS macos:PASS windows:PASS
 LATEST_EXACT_HEAD_TEST_SUITE = 103/103 PASS
 REAL_GOLD_TRACKER = issue #16
+CODEX_HOSTED_NOAUTH_REVISION = 10f3086c68fcb629413ad2acc4351e72c2901eee
+CODEX_HOSTED_NOAUTH_RUN = 33553753394
+CODEX_HOSTED_NOAUTH_CASES = missing-binary:PASS discovery-version:PASS platform-launch:PASS
+CODEX_HOSTED_NOAUTH_MATRIX = linux/x64:PASS macos/arm64:PASS windows/x64:PASS
 CODEX_GOLD = NOT_QUALIFIED
+CLAUDE_HOSTED_NOAUTH = BLOCKED_VENDOR_AUTHORITY_NOT_ESTABLISHED
 CLAUDE_GOLD = NOT_QUALIFIED
 ```
 
 Phases S–G and J are canonically complete. Phases H and I require real machine-observed vendor-CLI evidence across the required platform matrix. Phase K remains blocked until both candidates genuinely satisfy the Gold gate. Missing executables, credentials, vendor access, or platform environments remain `UNAVAILABLE`/`UNVERIFIED`; ordinary founder approval does not substitute for them.
+
+Canonical hosted Codex run `33553753394` establishes only the real no-auth subset recorded in `evidence-hosted-codex-noauth-2026-09-01.md`. It does not complete **D003-T101** because invalid/missing-auth behavior was not run, does not satisfy **D003-T112** through **D003-T114** because the complete claimed Gold surface remains unqualified, and does not promote Codex. Claude hosted installation/execution remains outside current canonical authority because the proprietary vendor-agreement prerequisite is not established in canonical project evidence; public installation documentation does not substitute for that external prerequisite.
 
 ## Phase S — Successor shaping
 
