@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -88,7 +88,7 @@ test('exact cwd and explicit environment modes are honored', async () => {
     }).result;
     assert.equal(exact.cause, 'EXITED');
     const parsed = JSON.parse(exact.stdout) as { cwd: string; keys: string[]; value: string };
-    assert.equal(parsed.cwd, cwd);
+    assert.equal(await realpath(parsed.cwd), await realpath(cwd));
     assert.equal(parsed.value, 'yes');
     assert.equal(parsed.keys.includes('DELETHOS_ONLY'), true);
 

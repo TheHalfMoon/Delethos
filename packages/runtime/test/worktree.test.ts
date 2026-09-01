@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { access, chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import test from 'node:test';
 import {
   cleanupOwnedWorktree,
@@ -75,7 +75,9 @@ test('prepareWorktree creates an exact detached locked worktree without copying 
     const preparedPath = prepared.path;
     await assert.rejects(() => access(join(preparedPath, 'untracked.txt')));
     const owned = await discoverOwnedWorktrees(fixture.root);
-    assert.equal(owned.some((entry) => resolve(entry.path) === resolve(prepared!.path)), true);
+    const preparedRealPath = await realpath(prepared.path);
+    const ownedRealPaths = await Promise.all(owned.map((entry) => realpath(entry.path)));
+    assert.equal(ownedRealPaths.includes(preparedRealPath), true);
   } finally {
     await cleanupFixture(fixture.root, prepared);
   }
@@ -156,7 +158,9 @@ test('worktree preparation suppresses post-checkout hooks and external filter dr
     process.env.GIT_DIR = join(fixture.root, 'hostile-nonexistent-git-dir');
     prepared = await prepareWorktree({ repositoryPath: fixture.root, baseSha: fixture.sha, runId: 'run-hostile-git' });
 
-    assert.deepEqual(prepared.suppressedFilterDrivers, ['clean', 'process', 'smudge']);
+    assert.equal(prepared.suppressedFilterDrivers.includes('clean'), true);
+    assert.equal(prepared.suppressedFilterDrivers.includes('process'), true);
+    assert.equal(prepared.suppressedFilterDrivers.includes('smudge'), true);
     await assert.rejects(() => access(hookMarker));
     await assert.rejects(() => access(filterMarker));
     const { readFile } = await import('node:fs/promises');

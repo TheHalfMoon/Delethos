@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { mkdtemp, mkdir, readdir, rmdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, isAbsolute, join, resolve } from 'node:path';
@@ -49,10 +50,18 @@ export class WorktreeRecoveryError extends Error {
   }
 }
 
+function canonicalPath(path: string): string {
+  let canonical: string;
+  try {
+    canonical = realpathSync.native(path);
+  } catch {
+    canonical = resolve(path);
+  }
+  return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
+}
+
 function samePath(a: string, b: string): boolean {
-  const left = resolve(a);
-  const right = resolve(b);
-  return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right;
+  return canonicalPath(a) === canonicalPath(b);
 }
 
 function ownershipReason(runId: string): string {
