@@ -16,6 +16,8 @@
     "packages/core/src/**/*.ts",
     "packages/core/test/**/*.ts",
     "packages/runtime/src/**/*.ts",
-    "packages/runtime/test/**/*.ts"
+    "packages/runtime/test/**/*.ts",
+    "packages/adapters/src/**/*.ts",
+    "packages/adapters/test/**/*.ts"
   ]
 }
