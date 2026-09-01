@@ -1,5 +1,5 @@
 import { superviseProcess, type ProcessResult, type SupervisedProcess } from '../../runtime/src/process.ts';
-import type { AdapterResultStatus, InvocationPlan } from './types.ts';
+import type { AdapterProcessEvidence, AdapterResultStatus, InvocationPlan } from './types.ts';
 
 export function superviseInvocation(plan: InvocationPlan): SupervisedProcess {
   if (!plan.executablePath) throw new TypeError('executablePath is required');
@@ -14,6 +14,22 @@ export function superviseInvocation(plan: InvocationPlan): SupervisedProcess {
     terminationGraceMs: plan.terminationGraceMs,
     outputLimitBytes: plan.outputLimitBytes,
   });
+}
+
+export function processEvidence(result: ProcessResult): AdapterProcessEvidence {
+  return {
+    processCause: result.cause,
+    exitCode: result.exitCode,
+    terminationStrategy: result.terminationStrategy,
+    terminationAttempted: result.terminationAttempted,
+    cleanupStatus: result.cleanupStatus,
+    cleanupDetail: result.cleanupDetail,
+    elapsedMs: result.elapsedMs,
+    stdoutBytes: result.stdoutBytes,
+    stderrBytes: result.stderrBytes,
+    retainedBytes: result.retainedBytes,
+    outputTruncated: result.outputTruncated,
+  };
 }
 
 export function statusFromProcess(result: ProcessResult): AdapterResultStatus | null {

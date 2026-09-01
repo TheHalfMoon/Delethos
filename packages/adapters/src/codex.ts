@@ -1,6 +1,6 @@
 import type { AdapterDiscovery, AdapterRunRequest, AdapterRunResult, AdapterDefinition, ExecutionIdentity, InvocationPlan } from './types.ts';
 import { validateAdapterRunRequest } from './types.ts';
-import { authFailureText, statusFromProcess, superviseInvocation } from './invocation.ts';
+import { authFailureText, processEvidence, statusFromProcess, superviseInvocation } from './invocation.ts';
 
 export const CODEX_DEFINITION: AdapterDefinition = {
   id: 'openai-codex-cli',
@@ -109,6 +109,7 @@ export function runCodex(request: AdapterRunRequest, discovery: AdapterDiscovery
     cancel: () => supervised.cancel(),
     result: (async (): Promise<AdapterRunResult> => {
       const processResult = await supervised.result;
+      const mechanism = processEvidence(processResult);
       const processStatus = statusFromProcess(processResult);
       const identityBase: ExecutionIdentity = {
         adapterId: 'openai-codex-cli',
@@ -120,18 +121,18 @@ export function runCodex(request: AdapterRunRequest, discovery: AdapterDiscovery
         observedProvider: null,
         sessionId: request.sessionId ?? null,
       };
-      if (processStatus !== null) return { status: processStatus, identity: identityBase, finalMessage: null, processCause: processResult.cause, exitCode: processResult.exitCode, stderr: processResult.stderr, warnings: [] };
+      if (processStatus !== null) return { status: processStatus, identity: identityBase, finalMessage: null, ...mechanism, stderr: processResult.stderr, warnings: [] };
 
       const parsed = parseCodexJsonl(processResult.stdout);
       const identity: ExecutionIdentity = { ...identityBase, observedModel: parsed.observedModel, sessionId: parsed.sessionId ?? identityBase.sessionId };
       if (processResult.exitCode !== 0) {
         const status = authFailureText(`${processResult.stderr}\n${processResult.stdout}`) ? 'AUTH_FAILED' : 'PROVIDER_FAILED';
-        return { status, identity, finalMessage: parsed.finalMessage, processCause: processResult.cause, exitCode: processResult.exitCode, stderr: processResult.stderr, warnings: parsed.warnings };
+        return { status, identity, finalMessage: parsed.finalMessage, ...mechanism, stderr: processResult.stderr, warnings: parsed.warnings };
       }
       if (parsed.invalid || parsed.providerFailed || parsed.finalMessage === null) {
-        return { status: parsed.providerFailed ? 'PROVIDER_FAILED' : 'INVALID_PROVIDER_OUTPUT', identity, finalMessage: parsed.finalMessage, processCause: processResult.cause, exitCode: processResult.exitCode, stderr: processResult.stderr, warnings: parsed.warnings };
+        return { status: parsed.providerFailed ? 'PROVIDER_FAILED' : 'INVALID_PROVIDER_OUTPUT', identity, finalMessage: parsed.finalMessage, ...mechanism, stderr: processResult.stderr, warnings: parsed.warnings };
       }
-      return { status: 'COMPLETED', identity, finalMessage: parsed.finalMessage, processCause: processResult.cause, exitCode: processResult.exitCode, stderr: processResult.stderr, warnings: parsed.warnings };
+      return { status: 'COMPLETED', identity, finalMessage: parsed.finalMessage, ...mechanism, stderr: processResult.stderr, warnings: parsed.warnings };
     })(),
   };
 }

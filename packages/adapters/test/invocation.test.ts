@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
-import { superviseInvocation } from '../src/index.ts';
+import { processEvidence, superviseInvocation } from '../src/index.ts';
 
 test('common invocation preserves exact cwd and argv without a shell', async () => {
   const cwd = resolve('.');
@@ -23,6 +23,19 @@ test('common invocation preserves exact cwd and argv without a shell', async () 
   const parsed = JSON.parse(result.stdout) as { cwd: string; arg: string };
   assert.equal(resolve(parsed.cwd), cwd);
   assert.equal(parsed.arg, 'space value ; $HOME');
+  assert.deepEqual(processEvidence(result), {
+    processCause: 'EXITED',
+    exitCode: 0,
+    terminationStrategy: 'NONE',
+    terminationAttempted: false,
+    cleanupStatus: 'NOT_NEEDED',
+    cleanupDetail: null,
+    elapsedMs: result.elapsedMs,
+    stdoutBytes: result.stdoutBytes,
+    stderrBytes: result.stderrBytes,
+    retainedBytes: result.retainedBytes,
+    outputTruncated: false,
+  });
 });
 
 test('common invocation keeps timeout distinct', async () => {
@@ -34,6 +47,7 @@ test('common invocation keeps timeout distinct', async () => {
   });
   const result = await supervised.result;
   assert.equal(result.cause, 'TIMED_OUT');
+  assert.equal(processEvidence(result).terminationAttempted, true);
 });
 
 test('common invocation keeps cancellation distinct', async () => {

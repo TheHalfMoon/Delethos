@@ -8,6 +8,9 @@ export type ExecutionPosture = 'WRITE' | 'READ_ONLY';
 export type ConfigurationPosture = 'CONTROLLED_BARE' | 'CONTROLLED_STANDARD' | 'NOT_APPLICABLE';
 export type InstallationState = 'DISCOVERED' | 'NOT_INSTALLED' | 'DISCOVERY_FAILED' | 'AMBIGUOUS';
 export type AdapterResultStatus = 'COMPLETED' | 'PROVIDER_FAILED' | 'INVALID_PROVIDER_OUTPUT' | 'AUTH_FAILED' | 'CONFIGURATION_FAILED' | 'UNSUPPORTED_CAPABILITY' | 'PROCESS_FAILED' | 'CANCELLED' | 'TIMED_OUT' | 'STALLED' | 'OUTPUT_LIMIT';
+export type AdapterProcessCause = 'EXITED' | 'FAILED_TO_START' | 'CANCELLED' | 'TIMED_OUT' | 'STALLED' | 'OUTPUT_LIMIT';
+export type AdapterCleanupStatus = 'NOT_NEEDED' | 'SUCCEEDED' | 'FAILED';
+export type AdapterTerminationStrategy = 'NONE' | 'POSIX_PROCESS_GROUP' | 'WINDOWS_TASKKILL_TREE';
 
 export interface CapabilitySet {
   readonly headless: CapabilityStatus;
@@ -73,12 +76,24 @@ export interface ExecutionIdentity {
   readonly sessionId: string | null;
 }
 
-export interface AdapterRunResult {
+export interface AdapterProcessEvidence {
+  readonly processCause: AdapterProcessCause;
+  readonly exitCode: number | null;
+  readonly terminationStrategy: AdapterTerminationStrategy;
+  readonly terminationAttempted: boolean;
+  readonly cleanupStatus: AdapterCleanupStatus;
+  readonly cleanupDetail: string | null;
+  readonly elapsedMs: number;
+  readonly stdoutBytes: number;
+  readonly stderrBytes: number;
+  readonly retainedBytes: number;
+  readonly outputTruncated: boolean;
+}
+
+export interface AdapterRunResult extends AdapterProcessEvidence {
   readonly status: AdapterResultStatus;
   readonly identity: ExecutionIdentity;
   readonly finalMessage: string | null;
-  readonly processCause: 'EXITED' | 'FAILED_TO_START' | 'CANCELLED' | 'TIMED_OUT' | 'STALLED' | 'OUTPUT_LIMIT';
-  readonly exitCode: number | null;
   readonly stderr: string;
   readonly warnings: readonly string[];
 }
