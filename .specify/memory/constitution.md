@@ -1,8 +1,8 @@
 # Delethos Constitution
 
 **Version:** 0.1.0  
-**Ratified:** pending canonical merge  
-**Status:** founding candidate
+**Ratification rule:** effective when this constitution is present on canonical `main` under the founding authority chain  
+**Status:** Active iff canonical; otherwise candidate
 
 ## Preamble
 
@@ -108,7 +108,7 @@ Competitive claims MUST be evidence-backed and must distinguish inspiration, int
 
 ## Governance
 
-1. This constitution is the highest project-level product-governance document.
+1. This constitution is the highest project-level product-governance document when canonical.
 2. `specs/CURRENT.md` owns the active execution frontier; live GitHub truth overrides stale text.
 3. ADRs govern durable architectural decisions; specifications govern bounded product changes; tasks govern execution order.
 4. A change that violates a constitutional principle requires a dedicated constitution amendment, not a hidden exception.

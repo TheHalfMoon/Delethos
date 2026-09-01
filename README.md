@@ -44,11 +44,11 @@ The deliverable is not an agent's summary. The deliverable is the exact reposito
 - **Honest adapter capability.** Unsupported, partial, unavailable, stalled, timed-out, or not-run states remain distinct.
 - **Proof-carrying patches.** A successful run can emit a portable evidence bundle that explains what changed, who/what acted, what ran, and what remains uncertain.
 
-## Status
+## Current phase
 
-`FOUNDING_CANDIDATE`
+**Specification 000 — Founding Governance & Architecture**
 
-Canonical `main` currently contains only the initial bootstrap. The `docs/founding-plan` branch proposes Specification 000 and the founding authority chain. Product runtime implementation is **not yet authorized**.
+The exact canonical state and execution authority are defined by [`specs/CURRENT.md`](specs/CURRENT.md). Product runtime implementation is **not authorized** while Specification 000 is the active founding authority.
 
 Read in this order before changing the repository:
 

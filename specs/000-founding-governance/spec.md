@@ -2,9 +2,9 @@
 
 ## Status
 
-`DRAFT_CANDIDATE`
+`ACTIVE` **iff this specification is present on canonical `main` under the frontier recorded by `specs/CURRENT.md`; otherwise it is a candidate copy.**
 
-This specification becomes active canonical authority only after the exact founding candidate is merged into canonical `main` and the merged authority chain is re-read. Until then, canonical `main` remains `FOUNDING_BOOTSTRAP`.
+Completion is a separate condition. An active Specification 000 remains open until its acceptance/evidence/closeout requirements are machine-observed.
 
 ## Purpose
 
@@ -14,7 +14,7 @@ The founding unit defines the product boundary, constitution, repository operati
 
 ## Problem
 
-Delethos starts from an empty repository and a high-ambition product thesis: become a neutral control plane for verified delegation across coding agents. Without founding constraints, the project could easily devolve into one of the failure modes it is meant to solve:
+Delethos starts from a high-ambition product thesis: become a neutral control plane for verified delegation across coding agents. Without founding constraints, the project could easily devolve into one of the failure modes it is meant to solve:
 
 - ad hoc vendor wrappers with inconsistent semantics;
 - a large autonomous orchestration surface before verification works;
@@ -150,7 +150,7 @@ At minimum, closeout evidence must retain:
 
 ## Recovery
 
-If the founding candidate becomes internally inconsistent or materially expands into product implementation:
+If a founding candidate becomes internally inconsistent or materially expands into product implementation:
 
 1. do not merge it as-is;
 2. reduce it to the documented Specification 000 surface;
