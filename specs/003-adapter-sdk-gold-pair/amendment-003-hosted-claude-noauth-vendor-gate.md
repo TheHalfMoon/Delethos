@@ -36,6 +36,8 @@ Fresh public research on 2026-09-01 established the following technical facts on
 - Anthropic's current setup documentation supports Claude Code on Linux, macOS, and Windows and documents `claude --version` as a verification command.
 - Current setup documentation supports installing a specific Claude Code version.
 - Authenticated Claude Code use requires an eligible Anthropic account/subscription or an expressly supported third-party provider configuration.
+- Anthropic's current binary-integrity documentation states that each release publishes a `manifest.json` containing SHA-256 checksums for platform binaries and a detached `manifest.json.sig` signed by the Claude Code release signing key.
+- The current official Claude Code release-key fingerprint documented by Anthropic is `31DD DE24 DDFA B679 F42D 7BD2 BAA9 29FF 1A7E CACE`.
 - The latest public non-prerelease GitHub release observed during this amendment's shaping pass was `v2.1.257`, published on 2026-09-01.
 - That release exposes native artifacts for the platform/architecture families relevant to Specification 003, plus checksum and signature artifacts.
 
@@ -67,37 +69,45 @@ The vendor-use gate may be considered satisfied only when genuine canonical proj
 
 That evidence must be bounded and privacy-preserving. It must not publish credentials, tokens, account secrets, billing details, contract contents, or other sensitive vendor data.
 
-A canonical evidence statement may record only the minimum necessary facts, for example:
+A canonical evidence statement must record the minimum auditable lifecycle facts without exposing vendor secrets, for example:
 
 ```text
 CLAUDE_VENDOR_USE_AUTHORITY = ESTABLISHED
 scope = hosted Specification 003 qualification
 provenance_category = user_or_organization_vendor_authority
+evidence_ref = <canonical non-secret evidence reference>
 recorded_date = <date>
+last_revalidated_date = <date>
+revocation_status = NOT_REVOKED
+revalidation_required = IMMEDIATELY_BEFORE_EACH_EXECUTION
 ```
+
+The authority record is not executable authority when its `evidence_ref` is missing or no longer resolves to the canonical bounded evidence, its scope does not cover hosted Specification 003 qualification, its revocation state is unknown or revoked, or it has not been revalidated immediately before the proposed execution. Any material vendor-terms, account, organization, billing, or qualification-context change makes the prior record stale until revalidated. Every execution unit must fail closed on stale, revoked, scope-mismatched, ambiguous, or otherwise non-current authority evidence.
 
 The project must not infer this state from ordinary approval. The project must not automatically accept vendor terms, create an account, purchase a subscription, initiate billing, or manufacture a vendor-agreement assertion.
 
-If the authority cannot be established, the gate remains blocked and no hosted Claude binary may be installed or executed by Delethos qualification automation.
+If the authority cannot be established and freshly revalidated, the gate remains blocked and no hosted Claude binary may be installed or executed by Delethos qualification automation.
 
 ## Conditional future hosted no-auth unit
 
-Only after `CLAUDE_VENDOR_USE_AUTHORITY = ESTABLISHED` is genuinely recorded may a separate bounded execution amendment/implementation unit be considered.
+Only after `CLAUDE_VENDOR_USE_AUTHORITY = ESTABLISHED` is genuinely recorded and immediately revalidated may a separate bounded execution amendment/implementation unit be considered.
 
 That future unit must, at minimum:
 
-1. re-read the latest official Claude Code installation, release, platform, license/terms, and version-verification facts;
+1. re-read the latest official Claude Code installation, release, platform, license/terms, signing-key, manifest-verification, and version-verification facts;
 2. select and record one exact Claude Code version rather than an unbounded latest channel;
-3. bind every platform-native artifact used for qualification to exact provenance and integrity evidence;
+3. obtain the official release signing key from Anthropic's documented distribution surface, verify that its full fingerprint exactly matches the current fingerprint freshly re-read from Anthropic's official documentation, verify the detached `manifest.json.sig` over the selected release's `manifest.json`, and only then compare each selected platform artifact and extracted executable SHA-256 against the authenticated manifest;
 4. use only official vendor distribution surfaces permitted by the established authority;
 5. materialize the executable only into runner-temporary qualification storage;
 6. avoid repository vendoring, redistribution, persistent installation, or automatic updater behavior;
-7. fail closed on unsupported platform/architecture, provenance ambiguity, integrity mismatch, version mismatch, or unexpected executable identity;
+7. fail closed on unsupported platform/architecture, signing-key fingerprint mismatch, signature failure, provenance ambiguity, manifest mismatch, artifact/executable integrity mismatch, version mismatch, or unexpected executable identity;
 8. verify the observed CLI version before conformance;
 9. preserve `contents: read` and no-secret behavior for a no-auth qualification job;
 10. run only separately authorized no-auth cases on trusted canonical `main`;
 11. preserve unavailable/failed cases as `UNAVAILABLE`/`FAIL`/`UNVERIFIED`, never PASS;
 12. keep all provider-backed, credentialed, billing-bearing, and Gold behavior outside that no-auth authority.
+
+The fingerprint written in this amendment is a shaping snapshot, not perpetual trust material. A future execution unit must freshly re-read the official Anthropic fingerprint and fail closed if current official documentation differs from the selected pinned value or if key rotation/revocation cannot be reconciled before execution.
 
 A future no-auth case set may shape narrowly around real executable absence, discovery/version, and platform launch. Invalid/missing-auth behavior must not be assumed equivalent to platform launch and must remain separately authorized and machine-observed if it can initiate vendor/provider behavior.
 
