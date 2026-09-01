@@ -4,109 +4,93 @@
 **Canonical branch:** `main`  
 **Specification 000 disposition:** `CLOSED_CANONICAL`  
 **Specification 001 disposition:** `CLOSED_CANONICAL`  
-**Specification 001 shaping merge:** `32843fb1495fd792dceddc0536a7fef6d90edf4e`  
-**Specification 001 implementation merge:** `9bdba350458fe2e7832658e3214d9a500dd7153e`  
-**Specification 001 terminal closeout merge:** `6c8ac8b51e96099912631607218b00aa85492e38`  
-**Specification 001 post-closeout CI:** `33501812656` — `SUCCESS` on Linux/macOS/Windows  
 **Specification 002 activation merge:** `39b10c6585f6201bb22ab2620013f6e1b76396ab`  
-**Specification 002 activation CI:** `33502613669` — `SUCCESS` on Linux/macOS/Windows  
-**State represented by this file when canonical:** `SPEC_002_ACTIVE`  
-**Active product specification when canonical:** `specs/002-worktree-process-supervision/spec.md`  
-**Normative Specification 002 amendment:** `specs/002-worktree-process-supervision/amendment-001-git-execution-safety.md`
+**Specification 002 Amendment 001 merge:** `08c7067c02395a541e9036c4a3767c9134c413c3`  
+**Specification 002 implementation merge:** `3a4f7cd7f308cf6535b54601d57ed5fd77dd6a91`  
+**Specification 002 canonical implementation CI:** `33506061231` — `SUCCESS` on Linux/macOS/Windows  
+**State represented by this file when canonical:** `POST_002_SHAPING` iff Specification 002 terminal-closeout effectivity conditions are realized; otherwise `SPEC_002_VERIFYING`  
+**Active product specification after realized closeout:** none
 
 Live GitHub/repository truth overrides this file.
 
-## Closed Specification 001 truth
-
-Specification 001 closure is machine-observed because:
-
-- terminal closeout is canonical at `6c8ac8b51e96099912631607218b00aa85492e38`;
-- `specs/001-core-run-policy-evidence/closeout.md` is present on canonical `main`;
-- the closeout PR used exact-head protection;
-- its exact two-path scope was reconciled;
-- Qodo remained billing-blocked and CodeRabbit automatic review remained skipped rather than being counted as approval;
-- canonical post-closeout CI run `33501812656` completed successfully on Linux, macOS, and Windows;
-- canonical authority was re-read after the merge.
-
-## Specification 002 authority
-
-Specification 002 is active at canonical activation merge `39b10c6585f6201bb22ab2620013f6e1b76396ab`, whose push CI run `33502613669` completed successfully on Linux, macOS, and Windows.
-
-When this file and Amendment 001 are canonical together, the amendment is normative and supersedes conflicting earlier Specification 002 wording about Git checkout/status execution safety.
+## Specification 002 canonical implementation truth
 
 ```text
-PROGRAM_STATUS = SPEC_002_ACTIVE
-ACTIVE_PRODUCT_SPEC = specs/002-worktree-process-supervision/spec.md
-NORMATIVE_AMENDMENT = specs/002-worktree-process-supervision/amendment-001-git-execution-safety.md
-PRODUCT_IMPLEMENTATION_AUTHORITY = SPEC_002_BOUNDED_RUNTIME_ONLY
-NEXT_ALLOWED_WORK = SPEC_002_TASK_ORDER_ONLY
+implementation_pr = 8
+implementation_base = 08c7067c02395a541e9036c4a3767c9134c413c3
+implementation_qualified_head = 99abd28b0329c26ccafdd3e997ef5c669dac6c4f
+implementation_merge = 3a4f7cd7f308cf6535b54601d57ed5fd77dd6a91
+implementation_tree = 481e543bf4a8f7e057cce70f81e3b03e55744a20
+implementation_changed_paths = 12
+qualified_pr_ci = 33505876910
+canonical_push_ci = 33506061231
 ```
 
-Specification 002 authorizes only the exact-base Git worktree and shell-free process-supervision surface named by its specification/plan, subject to the stricter Git-execution rules in Amendment 001.
+The final exact-head PR CI and canonical push CI both completed successfully on Linux, macOS, and Windows. Each required cell passed frozen pnpm installation, TypeScript 7 checking, all 57 Specification 001 + 002 tests, hostile Git execution-suppression fixtures, platform process cleanup fixtures, and zero external production dependency verification.
 
-## Specification 002 implementation surface
+Failed/partial predecessor runs `33505484328` and `33505740671` remain explicitly invalidated and documented in `specs/002-worktree-process-supervision/closeout.md`; they are not counted as qualification.
 
-Authorized product paths are limited to:
+## Specification 002 closeout effectivity
+
+Specification 002 becomes `CLOSED_CANONICAL` only if:
+
+1. `specs/002-worktree-process-supervision/closeout.md` is present on canonical `main`;
+2. the exact closeout candidate is qualified against canonical product revision `3a4f7cd7f308cf6535b54601d57ed5fd77dd6a91`;
+3. its changed-path set remains bounded to Specification 002 evidence/frontier documentation;
+4. review/review-thread/comment/mergeability/check truth is reconciled honestly;
+5. the closeout merges with expected-head protection;
+6. canonical `main` is re-read afterward;
+7. no configured required CI/check on the resulting closeout revision is failing.
+
+When those conditions are machine-observed:
 
 ```text
-package.json
-pnpm-lock.yaml
-tsconfig.json
-.github/workflows/ci.yml
-packages/runtime/package.json
-packages/runtime/src/git.ts
-packages/runtime/src/worktree.ts
-packages/runtime/src/process.ts
-packages/runtime/src/index.ts
-packages/runtime/test/git.test.ts
-packages/runtime/test/worktree.test.ts
-packages/runtime/test/process.test.ts
+SPEC_002_DISPOSITION = CLOSED_CANONICAL
+PROGRAM_STATUS = POST_002_SHAPING
+ACTIVE_PRODUCT_SPEC = NONE
+PRODUCT_IMPLEMENTATION_AUTHORITY = NONE
+NEXT_ALLOWED_WORK = BOUNDED_SPEC_003_SHAPING_ONLY
 ```
 
-Any additional product path requires a prior canonical Specification 002 plan amendment.
+Before they are realized, only bounded Specification 002 terminal closeout work is authorized.
 
-## Required Specification 002 invariants
+## Canonical Specification 002 result
 
-- worktrees are detached at an exact commit and locked with Delethos ownership provenance;
-- worktree isolation is never represented as a security sandbox;
-- dirty owned worktrees are preserved rather than force-removed;
-- repository discovery/worktree lifecycle must not intentionally execute repository-configured hooks, external clean/smudge/process filter commands, or external fsmonitor hooks;
-- inherited `GIT_*` control variables are removed before runtime Git spawn and `GIT_TERMINAL_PROMPT=0` is set;
-- every runtime Git command disables `core.fsmonitor` command-scoped;
-- `git worktree add` uses a fresh empty Delethos-owned `core.hooksPath` so `post-checkout` is not executed;
-- configured external filter drivers observed immediately before relevant operations are command-scoped disabled for `clean`, `smudge`, and `process`, with `required=false`;
-- suppressed filter-driver names are exposed as runtime facts and filtered/hydrated checkout equivalence is not claimed;
-- concurrent hostile repository-config mutation is a residual limitation, not a solved containment problem;
-- child execution uses direct executable/argument vectors with `shell: false`;
-- environment inheritance is explicit rather than accidental;
-- `CANCELLED`, `TIMED_OUT`, and stdio-inactivity `STALLED` remain distinct;
-- output is bounded;
-- first terminal cause is immutable;
-- platform process-tree cleanup claims are limited to what exact CI proves;
-- no adapter/provider/reviewer/guard/CLI/routing/release behavior enters this unit.
+The runtime now establishes:
 
-## Explicit non-authority
+- exact repository/base capture and exact-commit validation;
+- sanitized shell-free Git execution under Amendment 001;
+- detached locked exact-base worktree creation and ownership verification;
+- clean-only worktree cleanup with dirty recovery preservation;
+- filesystem-canonical path identity across qualified platform alias forms;
+- explicit process environment policy;
+- bounded output and immutable terminal-cause semantics;
+- distinct cancellation, timeout, stdio-inactivity stall, output-limit, natural exit, and start-failure results;
+- qualified ordinary descendant termination on Linux/macOS/Windows;
+- zero external production dependencies in the core/runtime packages.
 
-Specification 002 does not authorize:
+It does **not** establish a security sandbox, perfect process containment, coding-agent adapters, real reviewer execution, guard orchestration, final evidence bundles, CLI/TUI, routing, benchmarks, cloud behavior, automatic merge authority, or a public release.
+
+## Explicit non-authority after Specification 002
+
+Until a later canonical specification explicitly authorizes it, the following remain unauthorized:
 
 - coding-agent adapters/provider SDKs;
-- actual independent-review invocation or repair loops;
-- final patch/evidence bundle or verifier;
-- product guard-command execution;
-- CLI/TUI;
+- provider authentication/model/session behavior;
+- actual independent-review invocation or bounded repair loops;
+- repository guard-command engine;
+- final portable proof-carrying patch/evidence bundle and verifier;
+- CLI/TUI product surfaces;
 - routing/memory/bench;
 - cloud/telemetry;
 - automatic commit/push/merge/release;
-- arbitrary Git hook/filter execution or Git LFS/network hydration;
-- a sandbox or perfect process-containment claim;
-- protection against concurrent hostile repository-config mutation;
 - public package/release publication;
 - stable external `delethos.*.v1` claims.
 
 ## Administrative repository truth
 
-At activation shaping time, `main` is not branch-protected and no repository ruleset is configured. Repository description/homepage/topics remain external administrative follow-up unless changed through an explicitly supported repository-admin surface. These gaps do not silently become PASS.
+At this frontier, `main` remains unprotected and no repository ruleset is configured unless live GitHub truth changes separately. Repository description/homepage/topics remain external administrative follow-up. These are not represented as PASS.
 
 ## Continuation
 
-Do not begin product implementation from the original activation alone. First qualify and merge the exact Git-execution safety amendment, then re-read canonical `main`. After that, implement Specification 002 in task order under the amended invariants. Do not begin Specification 003 from the roadmap until Specification 002 is closed canonically and fresh successor shaping is justified.
+Qualify and merge the exact Specification 002 terminal closeout. Re-read canonical `main`. If closure is realized, perform fresh bounded Specification 003 shaping from current real coding-agent CLI capability/license/platform evidence. Do not select or implement adapters from roadmap text or stale assumptions alone.
