@@ -182,7 +182,7 @@ function startAgent(adapter, discovery, cwd, options = {}) {
 
 async function gitObservation(repo, baselineHead, baselineRefs, marker = null) {
   const head = gitText(['rev-parse', 'HEAD'], repo);
-  const refs = gitRefs(cwd);
+  const refs = gitRefs(repo);
   const status = gitText(['status', '--porcelain=v1', '--untracked-files=all'], repo);
   const diff = gitDiff(repo);
   return {
