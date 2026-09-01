@@ -47,6 +47,10 @@ async function cleanupFixture(root: string, prepared?: PreparedWorktree): Promis
   await rm(root, { recursive: true, force: true });
 }
 
+function normalizeEol(value: string): string {
+  return value.replaceAll('\r\n', '\n');
+}
+
 test('porcelain -z parser preserves paths with spaces and lock reasons', () => {
   const sha = 'a'.repeat(40);
   const input = Buffer.from(
@@ -164,8 +168,8 @@ test('worktree preparation suppresses post-checkout hooks and external filter dr
     await assert.rejects(() => access(hookMarker));
     await assert.rejects(() => access(filterMarker));
     const { readFile } = await import('node:fs/promises');
-    assert.equal(await readFile(join(prepared.path, 'smudge.txt'), 'utf8'), 'committed-smudge\n');
-    assert.equal(await readFile(join(prepared.path, 'process.txt'), 'utf8'), 'committed-process\n');
+    assert.equal(normalizeEol(await readFile(join(prepared.path, 'smudge.txt'), 'utf8')), 'committed-smudge\n');
+    assert.equal(normalizeEol(await readFile(join(prepared.path, 'process.txt'), 'utf8')), 'committed-process\n');
 
     await writeFile(join(prepared.path, 'clean.txt'), 'changed\n');
     assert.equal(await inspectWorktreeState(prepared.path), 'DIRTY');
