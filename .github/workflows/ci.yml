@@ -205,3 +205,6 @@ jobs:
 
       - name: Qualify platform launch
         run: node scripts/adapter-conformance.mjs --adapter codex --case platform-launch --output stdout
+
+      - name: Qualify authentication failure
+        run: node scripts/adapter-conformance.mjs --adapter codex --case auth-failure --output stdout
