@@ -175,7 +175,7 @@ jobs:
             throw "unsupported hosted qualification Windows architecture $arch"
           }
 
-          $source = Join-Path $installRoot "node_modules\@openai\$platformPackage\vendor\$targetTriple\bin\codex.exe"
+          $source = Join-Path $installRoot "node_modules\@openai\codex\node_modules\@openai\$platformPackage\vendor\$targetTriple\bin\codex.exe"
           if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
             throw "pinned Codex native executable was not found at $source"
           }
