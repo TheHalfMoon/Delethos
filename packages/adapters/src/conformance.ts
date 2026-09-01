@@ -70,6 +70,7 @@ export const BASELINE_GOLD_CASES: readonly ConformanceCaseId[] = [
   'exact-cwd',
   'provider-failure',
   'timeout',
+  'stall',
   'cancel',
   'process-tree-cleanup',
   'partial-diff',
@@ -83,11 +84,10 @@ export const BASELINE_GOLD_CASES: readonly ConformanceCaseId[] = [
   'config-isolation',
 ];
 
-export const OPTIONAL_CLAIM_CASES: Readonly<Record<'readOnly' | 'modelSelection' | 'resume' | 'stall', readonly ConformanceCaseId[]>> = {
+export const OPTIONAL_CLAIM_CASES: Readonly<Record<'readOnly' | 'modelSelection' | 'resume', readonly ConformanceCaseId[]>> = {
   readOnly: ['read-only', 'forbidden-write'],
   modelSelection: ['model-selection', 'malformed-model'],
   resume: ['resume'],
-  stall: ['stall'],
 };
 
 function boundedDetail(detail: string | null): string | null {

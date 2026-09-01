@@ -37,8 +37,9 @@ function record(
   });
 }
 
-test('baseline Gold gate includes required negative and dirty-precondition cases', () => {
+test('baseline Gold gate includes required negative, stall, and dirty-precondition cases', () => {
   assert.ok(BASELINE_GOLD_CASES.includes('missing-binary'));
+  assert.ok(BASELINE_GOLD_CASES.includes('stall'));
   assert.ok(BASELINE_GOLD_CASES.includes('dirty-precondition'));
 });
 

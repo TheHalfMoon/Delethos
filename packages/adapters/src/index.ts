@@ -1,9 +1,11 @@
 export {
   platformId,
   validateAdapterRunRequest,
+  type AdapterCandidateStatus,
   type AdapterCleanupStatus,
   type AdapterDefinition,
   type AdapterDiscovery,
+  type AdapterEnvironmentPolicy,
   type AdapterId,
   type AdapterProcessCause,
   type AdapterProcessEvidence,
@@ -24,8 +26,8 @@ export {
 
 export { discoverAdapter, resolveExecutable } from './discovery.ts';
 export { authFailureText, processEvidence, statusFromProcess, superviseInvocation } from './invocation.ts';
-export { CODEX_DEFINITION, buildCodexInvocation, parseCodexJsonl, runCodex } from './codex.ts';
-export { CLAUDE_DEFINITION, buildClaudeInvocation, claudeSupportsRestricted, parseClaudeJson, runClaude } from './claude.ts';
+export { CODEX_DEFINITION, buildCodexInvocation, parseCodexJsonl, runCodexQualified as runCodex } from './codex.ts';
+export { CLAUDE_DEFINITION, buildClaudeInvocation, claudeSupportsRestricted, parseClaudeJson, runClaudeQualified as runClaude } from './claude.ts';
 export {
   BASELINE_GOLD_CASES,
   OPTIONAL_CLAIM_CASES,

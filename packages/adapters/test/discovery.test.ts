@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile, chmod } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { CODEX_DEFINITION, discoverAdapter, resolveExecutable } from '../src/index.ts';
 
 test('explicit executable discovery resolves process executable', async () => {
@@ -23,16 +23,24 @@ test('adapter discovery records exact path and version without auth inference', 
   assert.match(result.cliVersion ?? '', /^v?\d+/);
 });
 
-test('PATH ambiguity fails closed when distinct executables exist', async (t) => {
-  if (process.platform === 'win32') { t.skip('POSIX executable fixture only'); return; }
+test('PATH ambiguity fails closed when distinct executables exist', async () => {
   const root = await mkdtemp(join(tmpdir(), 'delethos-discovery-'));
   try {
     const a = join(root, 'a');
     const b = join(root, 'b');
-    await Promise.all([writeFile(a, '#!/bin/sh\nexit 0\n'), writeFile(b, '#!/bin/sh\nexit 0\n')]);
-    await Promise.all([chmod(a, 0o755), chmod(b, 0o755)]);
-    const result = await resolveExecutable(a);
-    assert.equal(result.state, 'DISCOVERED');
+    await Promise.all([mkdir(a), mkdir(b)]);
+    const command = 'delethos-ambiguous';
+    const filename = process.platform === 'win32' ? `${command}.exe` : command;
+    const first = join(a, filename);
+    const second = join(b, filename);
+    const contents = process.platform === 'win32' ? '' : '#!/bin/sh\nexit 0\n';
+    await Promise.all([writeFile(first, contents), writeFile(second, contents)]);
+    if (process.platform !== 'win32') await Promise.all([chmod(first, 0o755), chmod(second, 0o755)]);
+
+    const result = await resolveExecutable(command, [a, b].join(delimiter));
+    assert.equal(result.state, 'AMBIGUOUS');
+    assert.equal(result.paths.length, 2);
+    assert.notEqual(result.paths[0], result.paths[1]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
