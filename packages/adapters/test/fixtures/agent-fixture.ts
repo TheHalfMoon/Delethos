@@ -1,3 +1,6 @@
+import { appendFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+
 const mode = process.argv[2] ?? 'noop';
 
 switch (mode) {
@@ -30,6 +33,21 @@ switch (mode) {
     process.stdout.write('pulse');
     setTimeout(() => {}, 60_000);
     break;
+  case 'spawn-child-then-stall': {
+    const child = spawn(process.execPath, ['-e', 'setTimeout(()=>{},60000)'], { stdio: 'ignore' });
+    process.stdout.write(`child=${child.pid ?? 'unknown'}\npartial-output\n`);
+    setTimeout(() => {}, 60_000);
+    break;
+  }
+  case 'edit-then-stall': {
+    const path = process.argv[3];
+    const marker = process.argv[4];
+    if (!path || !marker) throw new Error('edit-then-stall requires path and marker');
+    appendFileSync(path, marker, 'utf8');
+    process.stdout.write('edit-complete\n');
+    setTimeout(() => {}, 60_000);
+    break;
+  }
   case 'echo-cwd':
     process.stdout.write(process.cwd());
     break;

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
+import * as adapters from '../src/index.ts';
 import { buildCodexInvocation, CODEX_DEFINITION, CLAUDE_DEFINITION, validateAdapterRunRequest } from '../src/index.ts';
 
 function baseRequest(overrides = {}) {
@@ -44,8 +45,14 @@ test('explicit environment policy rejects unsafe names and NUL values', () => {
   assert.throws(() => validateAdapterRunRequest({ ...base, environmentPolicy: { mode: 'EXACT', values: { A: 'x\0y' } } }), /environment values/);
 });
 
-test('public Codex dispatch rejects unverified capabilities before launch', () => {
+test('public Codex dispatch rejects unverified capabilities before launch, including model and session requests', () => {
   const discovery = { adapterId: 'openai-codex-cli' as const, state: 'DISCOVERED' as const, executablePath: process.execPath, cliVersion: process.version, detail: null };
   assert.throws(() => buildCodexInvocation(baseRequest(), discovery), /capability is UNVERIFIED/);
   assert.throws(() => buildCodexInvocation(baseRequest({ model: 'gpt-test' }), discovery), /capability is UNVERIFIED/);
+  assert.throws(() => buildCodexInvocation(baseRequest({ sessionId: 'session-test' }), discovery), /capability is UNVERIFIED/);
+});
+
+test('public adapter SDK exports no commit, push, merge, or release authority', () => {
+  const forbidden = Object.keys(adapters).filter((name) => /(?:commit|push|merge|release)/i.test(name));
+  assert.deepEqual(forbidden, []);
 });
