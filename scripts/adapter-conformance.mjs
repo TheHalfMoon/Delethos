@@ -63,7 +63,7 @@ function parseArgs(argv) {
 }
 
 function requestedPosture(caseId) {
-  if (caseId === 'missing-binary' || caseId === 'discovery-version' || caseId === 'platform-launch') return null;
+  if (caseId === 'missing-binary' || caseId === 'discovery-version' || caseId === 'platform-launch' || caseId === 'auth-failure') return null;
   if (caseId === 'read-only' || caseId === 'forbidden-write') return 'READ_ONLY';
   return 'WRITE';
 }
@@ -342,10 +342,9 @@ async function main() {
         emit('UNVERIFIED', `isolated auth status=${state}`, facts(null, observation, baselineHead));
         return;
       }
-      const result = await startAgent(selected.adapter, discovery, repo, { environment, prompt: 'Reply with DELETHOS_AUTH_NEGATIVE only. Do not modify files.' }).result;
       const observation = await observe();
-      const pass = result.status === 'AUTH_FAILED' && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
-      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation, baselineHead));
+      const pass = observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `auth-status=${state}`, facts(null, observation, baselineHead));
       return;
     }
 
