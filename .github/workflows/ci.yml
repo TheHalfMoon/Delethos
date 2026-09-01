@@ -50,3 +50,118 @@ jobs:
 
       - name: Verify zero production dependencies
         run: pnpm check:runtime-deps
+
+  codex-noauth-real:
+    name: codex no-auth real / ${{ matrix.os }}
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[codex-noauth]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout canonical main
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm and Node 24
+        uses: pnpm/setup@v2
+        with:
+          version: 11.22.0
+          runtime: node@24
+          install: false
+
+      - name: Install repository dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install pinned native Codex CLI
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync } = require('node:fs');
+          const { EOL } = require('node:os');
+          const { join } = require('node:path');
+          const { spawnSync } = require('node:child_process');
+
+          const installRoot = join(process.env.RUNNER_TEMP, 'delethos-codex-install');
+          mkdirSync(installRoot, { recursive: true });
+
+          const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+          const install = spawnSync(
+            npmCommand,
+            [
+              'install',
+              '--prefix', installRoot,
+              '--ignore-scripts',
+              '--include=optional',
+              '--no-audit',
+              '--no-fund',
+              '--package-lock=false',
+              '@openai/codex@0.152.0',
+            ],
+            { stdio: 'inherit', shell: false },
+          );
+          if (install.status !== 0) {
+            throw new Error(`pinned Codex install failed with status ${install.status ?? 'null'}`);
+          }
+
+          const targets = {
+            'linux:x64': ['codex-linux-x64', 'x86_64-unknown-linux-musl', 'codex'],
+            'linux:arm64': ['codex-linux-arm64', 'aarch64-unknown-linux-musl', 'codex'],
+            'darwin:x64': ['codex-darwin-x64', 'x86_64-apple-darwin', 'codex'],
+            'darwin:arm64': ['codex-darwin-arm64', 'aarch64-apple-darwin', 'codex'],
+            'win32:x64': ['codex-win32-x64', 'x86_64-pc-windows-msvc', 'codex.exe'],
+            'win32:arm64': ['codex-win32-arm64', 'aarch64-pc-windows-msvc', 'codex.exe'],
+          };
+          const selected = targets[`${process.platform}:${process.arch}`];
+          if (!selected) {
+            throw new Error(`unsupported hosted qualification platform ${process.platform}/${process.arch}`);
+          }
+
+          const [platformPackage, targetTriple, executableName] = selected;
+          const source = join(
+            installRoot,
+            'node_modules',
+            '@openai',
+            platformPackage,
+            'vendor',
+            targetTriple,
+            'bin',
+            executableName,
+          );
+          if (!existsSync(source)) {
+            throw new Error(`pinned Codex native executable was not found at ${source}`);
+          }
+
+          const binDir = join(process.env.RUNNER_TEMP, 'delethos-codex-bin');
+          mkdirSync(binDir, { recursive: true });
+          const destination = join(binDir, executableName);
+          copyFileSync(source, destination);
+          if (process.platform !== 'win32') chmodSync(destination, 0o755);
+
+          const version = spawnSync(destination, ['--version'], {
+            encoding: 'utf8',
+            shell: false,
+          });
+          const observed = `${version.stdout ?? ''}${version.stderr ?? ''}`.trim();
+          if (version.status !== 0 || !observed.includes('0.152.0')) {
+            throw new Error(`unexpected Codex version: status=${version.status ?? 'null'} output=${observed}`);
+          }
+          console.log(`Pinned Codex CLI: ${observed}`);
+          appendFileSync(process.env.GITHUB_PATH, `${binDir}${EOL}`);
+          NODE
+
+      - name: Qualify missing binary
+        run: node scripts/adapter-conformance.mjs --adapter codex --case missing-binary --output stdout
+
+      - name: Qualify discovery and version
+        run: node scripts/adapter-conformance.mjs --adapter codex --case discovery-version --output stdout
+
+      - name: Qualify platform launch
+        run: node scripts/adapter-conformance.mjs --adapter codex --case platform-launch --output stdout
+
+      - name: Qualify isolated authentication failure
+        run: node scripts/adapter-conformance.mjs --adapter codex --case auth-failure --output stdout
