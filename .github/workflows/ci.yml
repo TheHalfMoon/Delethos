@@ -208,3 +208,57 @@ jobs:
 
       - name: Qualify authentication failure
         run: node scripts/adapter-conformance.mjs --adapter codex --case auth-failure --output stdout
+
+  claude-missing-real:
+    name: claude sentinel missing-binary real / ${{ matrix.os }}
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[claude-missing]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout canonical main
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm and Node 24
+        uses: pnpm/setup@v2
+        with:
+          version: 11.22.0
+          runtime: node@24
+          install: false
+
+      - name: Install repository dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Guard sentinel-only missing-binary semantics
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const source = readFileSync('scripts/adapter-conformance.mjs', 'utf8');
+          const start = source.indexOf("if (selected.case === 'missing-binary')");
+          const end = source.indexOf('\n    discovery = await discoverAdapter', start);
+          if (start < 0 || end < 0 || end <= start) {
+            throw new Error('missing-binary conformance block could not be bounded');
+          }
+          const block = source.slice(start, end);
+          if (!block.includes('delethos-definitely-missing-${process.pid}')) {
+            throw new Error('missing-binary sentinel semantics changed');
+          }
+          for (const forbidden of ['discoverAdapter(', 'startAgent(', 'runClaude(', 'authState(']) {
+            if (block.includes(forbidden)) {
+              throw new Error(`missing-binary block unexpectedly contains ${forbidden}`);
+            }
+          }
+          console.log('Sentinel-only missing-binary semantics verified; no vendor executable discovery or invocation is in this case block.');
+          NODE
+
+      - name: Observe Claude candidate missing-executable path
+        run: node scripts/adapter-conformance.mjs --adapter claude --case missing-binary --output stdout
