@@ -15,12 +15,13 @@ CANONICAL_POST_MERGE_CI = 33529134266
 CANONICAL_GOVERNANCE_REVISION = 5ee580bf73ac602da323a07b70f862647c282fb2
 CANONICAL_GOVERNANCE_POST_MERGE_CI = 33559051578
 DETERMINISTIC_MATRIX = linux:PASS macos:PASS windows:PASS
-LATEST_EXACT_HEAD_TEST_SUITE = 103/103 PASS
+LATEST_EXACT_HEAD_TEST_SUITE = 105/105 PASS
 REAL_GOLD_TRACKER = issue #16
-CODEX_HOSTED_NOAUTH_REVISION = 10f3086c68fcb629413ad2acc4351e72c2901eee
-CODEX_HOSTED_NOAUTH_RUN = 33553753394
-CODEX_HOSTED_NOAUTH_CASES = missing-binary:PASS discovery-version:PASS platform-launch:PASS
+CODEX_HOSTED_NOAUTH_REVISION = 6f60edc8b388eca0476050ee9a87536166348fac
+CODEX_HOSTED_NOAUTH_RUN = 33560429571
+CODEX_HOSTED_NOAUTH_CASES = missing-binary:PASS discovery-version:PASS platform-launch:PASS auth-failure:PASS
 CODEX_HOSTED_NOAUTH_MATRIX = linux/x64:PASS macos/arm64:PASS windows/x64:PASS
+D003_T101 = COMPLETE
 CODEX_GOLD = NOT_QUALIFIED
 CLAUDE_VENDOR_USE_AUTHORITY = NOT_ESTABLISHED_IN_CANONICAL_EVIDENCE
 CLAUDE_HOSTED_NOAUTH = PROHIBITED_WHILE_GATE_UNSATISFIED
@@ -28,9 +29,9 @@ CLAUDE_RELEASE_PROVENANCE_GATE = SIGNED_MANIFEST_PLUS_FRESH_OFFICIAL_FINGERPRINT
 CLAUDE_GOLD = NOT_QUALIFIED
 ```
 
-Phases S–G and J are canonically complete. Phases H and I require real machine-observed vendor-CLI evidence across the required platform matrix. Phase K remains blocked until both candidates genuinely satisfy the Gold gate. Missing executables, credentials, vendor access, or platform environments remain `UNAVAILABLE`/`UNVERIFIED`; ordinary founder approval does not substitute for them.
+Phases S–G and J are canonically complete. Phase H now has one completed real-qualification task, **D003-T101**, backed by the four-case hosted Codex no-auth matrix. All remaining Phase H work, all Phase I work, and Phase K remain evidence-gated. Missing credentials, vendor access, or authorized execution environments remain `UNAVAILABLE`/`UNVERIFIED`; ordinary founder approval does not substitute for them.
 
-Canonical hosted Codex run `33553753394` establishes only the real no-auth subset recorded in `evidence-hosted-codex-noauth-2026-09-01.md`. It does not complete **D003-T101** because invalid/missing-auth behavior was not run, does not satisfy **D003-T112** through **D003-T114** because the complete claimed Gold surface remains unqualified, and does not promote Codex.
+Canonical hosted Codex run `33560429571` at exact revision `6f60edc8b388eca0476050ee9a87536166348fac` establishes the complete four-case no-auth subset authorized by Amendment 001 and recorded in `evidence-hosted-codex-noauth-2026-09-01.md`. Linux/x64, macOS/arm64, and Windows/x64 each machine-observed PASS for `missing-binary`, `discovery-version`, `platform-launch`, and status-only `auth-failure` using Codex `0.152.0`. The `auth-failure` record was posture-neutral, observed `auth-status=UNAUTHENTICATED`, emitted no adapter/provider/session/model result facts, and preserved clean Git head/refs/worktree state. This completes **D003-T101** only. It does not complete **D003-T100**, **D003-T102** through **D003-T115**, or any Gold/platform-complete task because the remaining claimed Gold surface requires separate credentialed/provider-backed machine evidence.
 
 Canonical Specification 003 Amendment 003 at `5ee580bf73ac602da323a07b70f862647c282fb2`, with post-merge deterministic run `33559051578` successful on Linux/macOS/Windows, establishes the fail-closed Claude hosted-qualification authority boundary. It does not establish that the repository owner lacks a vendor agreement; it records only that canonical project evidence available to this qualification context does not establish authority to install or execute Claude Code in hosted Specification 003 qualification. Any future hosted Claude execution requires a canonical non-secret authority evidence reference, exact hosted-Specification-003 scope, non-revoked current status, immediate pre-execution revalidation, fresh official release/signing facts, authenticated detached-manifest verification, and artifact/executable integrity verification. No Phase I checkbox is promoted by this governance evidence, and public release/install documentation remains shaping/provenance evidence rather than runtime qualification.
 
@@ -138,7 +139,7 @@ Canonical Specification 003 Amendment 003 at `5ee580bf73ac602da323a07b70f862647c
 ## Phase H — Codex real qualification
 
 - [ ] **D003-T100** Record exact Codex executable/version/platform before each qualified run.
-- [ ] **D003-T101** Qualify missing-binary and invalid/missing-auth behavior.
+- [x] **D003-T101** Qualify missing-binary and invalid/missing-auth behavior.
 - [ ] **D003-T102** Qualify credentialed bounded write success when authorization/environment is available.
 - [ ] **D003-T103** Qualify exact cwd and inspect Git diff independently of provider output.
 - [ ] **D003-T104** Qualify read-only + forbidden-write negative path before marking read-only supported.
