@@ -2,9 +2,9 @@
 
 ## Status
 
-`ACTIVE` **iff this specification is present on canonical `main` under the frontier recorded by `specs/CURRENT.md`; otherwise it is a candidate copy.**
+`CLOSED_CANONICAL` **iff the terminal effectivity conditions in `closeout.md` are realized on canonical `main`; otherwise this specification remains active for bounded closeout only.**
 
-Completion is a separate condition. An active Specification 000 remains open until its acceptance/evidence/closeout requirements are machine-observed.
+Completion is determined by machine-observed repository truth, not by this status text alone.
 
 ## Purpose
 
@@ -37,7 +37,7 @@ A maintainer or coding agent can enter the repository, follow one canonical read
 - `AGENTS.md` canonical operating rules;
 - `.specify/memory/constitution.md`;
 - `specs/CURRENT.md`;
-- Specification 000 `spec.md`, `plan.md`, `tasks.md`;
+- Specification 000 `spec.md`, `plan.md`, `tasks.md`, and `closeout.md`;
 - `docs/EXECUTION_MASTER_PLAN.md`;
 - `docs/ARCHITECTURE.md`;
 - `docs/SECURITY_MODEL.md`;
@@ -80,7 +80,7 @@ A maintainer or coding agent can enter the repository, follow one canonical read
 
 ## Founding architectural decisions
 
-The candidate architecture establishes these durable boundaries:
+The founding architecture establishes these durable boundaries:
 
 - Git/repository state is the authoritative change substrate.
 - Delethos coordinates external CLIs through adapters.
@@ -129,37 +129,39 @@ Specification 000 may close only when canonical repository truth proves all of t
 
 ## Evidence requirements
 
-At minimum, closeout evidence must retain:
+The terminal evidence is recorded in `closeout.md` and binds:
 
-- canonical base and final Specification 000 merge revision;
-- exact Specification 000 changed-path set;
-- exact review/thread/comment/mergeability reconciliation for the terminal founding PR/unit;
-- any configured CI/governance validation result IDs once such checks actually exist;
-- confirmation that no runtime product source/package/dependency/release surface was added outside authority;
-- canonical hashes/references for the constitution, current frontier, master plan, architecture, evidence model, adapter contract, security model, and founding research;
-- honest record of unavailable/skipped review systems.
+- founding bootstrap and activation revisions;
+- exact 22-path founding activation surface;
+- exact PR #1 head/base/merge/review/thread/comment truth;
+- absence of configured founding CI/statuses;
+- canonical hashes/references for the authority chain;
+- explicit no-runtime-product confirmation;
+- residual repository administration gaps;
+- unresolved product hypotheses;
+- the post-closeout shaping rule.
 
-## Risks
+## Risks preserved after closeout
 
-- **Over-governance before value:** mitigate by keeping Specification 000 bounded and moving quickly to a small Spec 001 after closure.
-- **Architecture fiction:** mitigate by labeling interfaces/schema examples as candidates until implementation evidence exists.
-- **Vendor bias:** mitigate by selecting first adapters from explicit later criteria, not the founding author's preference.
-- **Security overclaim:** mitigate through explicit non-claims and adapter-specific qualification.
-- **Growth pressure:** mitigate by keeping adoption metrics observational.
-- **Stale plan:** mitigate through `specs/CURRENT.md` and live-truth precedence.
+- **Over-governance before value:** Specification 001 should remain a small deterministic core-state unit.
+- **Architecture fiction:** interface/schema examples remain candidates until implementation/tests exist.
+- **Vendor bias:** first adapters remain unselected until a later evidence-backed spec.
+- **Security overclaim:** sandbox/read-only/provider controls remain unclaimed until qualified.
+- **Growth pressure:** adoption metrics remain observational.
+- **Repository administration:** branch protection/rulesets and metadata are live external gaps and must not be represented as applied.
 
 ## Recovery
 
-If a founding candidate becomes internally inconsistent or materially expands into product implementation:
+If the terminal closeout candidate materially expands into product implementation or contradicts founding authority:
 
 1. do not merge it as-is;
-2. reduce it to the documented Specification 000 surface;
-3. preserve useful research but remove unsupported claims;
-4. re-run exact review/reconciliation on the repaired candidate;
+2. reduce it to the authorized documentation/evidence surface;
+3. preserve accurate historical evidence;
+4. re-run exact-head review/reconciliation on the repaired candidate;
 5. do not carry accidental product code forward as implied authority.
 
 ## Completion rule
 
-Specification 000 becomes `CLOSED_CANONICAL` only after all acceptance/evidence conditions are machine-observed against canonical repository truth. Completion is not realized by editing the status text alone.
+Specification 000 becomes `CLOSED_CANONICAL` only when all terminal conditions in `closeout.md` are machine-observed against canonical repository truth.
 
-After closure, shape Specification 001 from the canonical founding contracts plus fresh implementation research. Do not create or execute Specification 001 merely because it appears in the master roadmap.
+After closure, shape Specification 001 from the canonical founding contracts plus fresh implementation research. Do not start runtime implementation from roadmap text or from Specification 000 closure alone.

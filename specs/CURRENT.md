@@ -2,10 +2,10 @@
 
 **Repository:** `TheHalfMoon/Delethos`  
 **Canonical branch:** `main`  
-**Founding bootstrap commit:** `3fab6947ab4b29ded821ec75e775119c270c7eac`  
-**State represented by this file when canonical:** `SPEC_000_FOUNDING_GOVERNANCE_ACTIVE`  
-**Active specification when canonical:** `specs/000-founding-governance/spec.md`  
-**Product runtime implementation:** not authorized
+**Founding activation merge:** `7e44ab45be0b89af7d4fb6cb2ee2f13e6e69839b`  
+**Founding activation tree:** `5055f2b7b0e859e63443d3fc27183c4335ee9541`  
+**State represented by this file when canonical:** `POST_000_SHAPING` iff the terminal closeout effectivity conditions are realized; otherwise `SPEC_000_FOUNDING_GOVERNANCE_ACTIVE`  
+**Product runtime implementation:** not authorized by Specification 000
 
 Live GitHub/repository truth overrides this file.
 
@@ -13,55 +13,67 @@ Live GitHub/repository truth overrides this file.
 
 This file is authoritative only when read from canonical `main` at the current canonical revision.
 
-- Before the founding authority chain is merged, canonical `main` remains the bootstrap state and this file is only a candidate.
-- Once this exact authority chain is canonical, Specification 000 is active under the conditions below.
-- If later canonical work supersedes this frontier, the newer canonical authority controls even if an old checkout still contains this text.
+Specification 000 is `CLOSED_CANONICAL` only if the terminal conditions in `specs/000-founding-governance/closeout.md` are all machine-observed. In particular, the exact closeout candidate must merge after exact-head reconciliation and canonical `main` must be re-read afterward.
 
-## Active founding authority
+If those conditions are not yet satisfied, Specification 000 remains active and only its bounded closeout work is authorized.
 
-When canonical, Specification 000 authorizes governance/planning/research/contract/security/contribution surfaces only. It does not authorize runtime packages, adapter implementation, CLI/TUI implementation, dependency installation, release publication, hosted services, benchmark execution, or vendor capability claims beyond recorded founding research.
+## Canonical founding activation
+
+PR #1 activated the founding authority chain:
 
 ```text
-PROGRAM_STATUS = SPEC_000_FOUNDING_GOVERNANCE_ACTIVE
-ACTIVE_SPEC = specs/000-founding-governance/spec.md
-PRODUCT_IMPLEMENTATION_AUTHORITY = NONE
-NEXT_ALLOWED_WORK = SPEC_000_TASK_ORDER_ONLY
+bootstrap_base = 3fab6947ab4b29ded821ec75e775119c270c7eac
+qualified_pr_head = 2d5903fe608e86f1a9e8f222d38527179d0b4b3e
+activation_pr = 1
+activation_merge = 7e44ab45be0b89af7d4fb6cb2ee2f13e6e69839b
+activation_tree = 5055f2b7b0e859e63443d3fc27183c4335ee9541
+activation_changed_paths = 22
 ```
 
-## Founding activation gate
+The activation merge is GitHub-signature-verified. Its exact bootstrap-to-canonical diff contains only the authorized founding documentation/governance surface and no runtime product implementation.
 
-Before treating this state as canonical active authority, verify:
+## Founding closeout truth
 
-1. the founding authority chain itself is present on canonical `main`;
-2. its merge lineage includes the intended founding candidate without material scope drift;
-3. the changed-path set is limited to Specification 000's authorized founding surface;
-4. no product runtime code, package manager files, dependencies, releases, tags, benchmark results, or adapter support claims entered through the founding activation;
-5. reviews, review threads, substantive comments, and mergeability were reconciled on the exact qualified head;
-6. unavailable/skipped review systems were recorded honestly rather than treated as PASS;
-7. expected-head protection was used where the available GitHub surface supported it;
-8. canonical `main` was re-read after merge;
-9. the constitution, `AGENTS.md`, master plan, Specification 000, and this frontier agree on authority.
+The canonical activation evidence establishes:
 
-CI/check status must be reported from live machine-observed truth. The founding repository must not infer a green status from the absence of configured workflows.
+- constitution, canonical reading order, architecture, security model, evidence model, adapter contract, founding ADRs/research, roadmap, adoption strategy, contribution/security/license/PR surfaces exist;
+- the 22-path founding activation is within Specification 000 authority;
+- no product source/package/dependency/release/benchmark/adapter implementation entered through activation;
+- PR #1 had 0 submitted reviews and 0 inline review threads;
+- Qodo was billing-blocked, CodeRabbit did not submit an approving review, and Cubic was summary-only; none was treated as PASS;
+- no repository CI was configured for activation and the canonical activation merge has no commit statuses;
+- `main` is currently unprotected and no ruleset exists;
+- repository description/homepage/topics are currently unset/empty.
 
-## Explicit non-authority
+The administrative gaps are recorded as residual follow-up, not fabricated as complete.
 
-Specification 000 does not authorize:
+## Post-000 transition
 
-- product source code;
-- a Node/TypeScript scaffold merely because the architecture prefers that direction;
-- Codex, Claude Code, Cursor, OpenCode, Gemini, Copilot, or any other adapter implementation;
-- automatic agent routing;
-- automatic commits/merges;
-- a cloud control plane;
-- persistent telemetry;
-- a public benchmark result;
-- `Delethos Verified` badges on real changes;
-- stable `delethos.*.v1` schema claims;
-- release publication;
-- claims of superiority, safety, speed, cost, or defect-detection advantage;
-- successor specifications solely to maintain activity.
+When Specification 000's terminal effectivity conditions are realized:
+
+```text
+PROGRAM_STATUS = POST_000_SHAPING
+ACTIVE_PRODUCT_SPEC = NONE
+PRODUCT_IMPLEMENTATION_AUTHORITY = NONE
+NEXT_ALLOWED_WORK = BOUNDED_SPEC_001_SHAPING_ONLY
+```
+
+Specification 001 may then be shaped from canonical founding contracts plus fresh implementation research. Runtime implementation begins only if a later canonical Specification 001 activation explicitly authorizes it.
+
+## Explicit non-authority after Specification 000
+
+The following remain unauthorized until a later active product specification says otherwise:
+
+- product runtime source/scaffolding;
+- any named coding-agent adapter;
+- automatic routing;
+- automatic commit/merge/release;
+- cloud/hosted scope;
+- stable `delethos.*.v1` claims;
+- public benchmark/superiority claims;
+- TUI/Agent Skill/GitHub integration implementation;
+- repository-administration claims not reflected by live GitHub state.
 
 ## Continuation
 
-Complete Specification 000 in its canonical task order. Close it only after every founding acceptance criterion is machine-observed against canonical repository truth. Then shape Specification 001 from the canonical contracts and fresh implementation research; do not start runtime implementation from roadmap text alone.
+Complete the exact terminal closeout gate. After successful expected-head merge and canonical re-read, shape Specification 001 as a bounded deterministic core-state unit. Do not start runtime implementation from the roadmap or this transition record alone.
