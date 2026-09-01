@@ -1,6 +1,6 @@
 import type { AdapterDefinition, AdapterDiscovery, AdapterRunRequest, AdapterRunResult, ConfigurationPosture, ExecutionIdentity, InvocationPlan } from './types.ts';
 import { validateAdapterRunRequest } from './types.ts';
-import { authFailureText, statusFromProcess, superviseInvocation } from './invocation.ts';
+import { authFailureText, processEvidence, statusFromProcess, superviseInvocation } from './invocation.ts';
 
 export const CLAUDE_DEFINITION: AdapterDefinition = {
   id: 'anthropic-claude-code',
@@ -32,6 +32,23 @@ function requireConfigurationPosture(value: ConfigurationPosture | undefined): E
   return value;
 }
 
+function parseVersion(value: string): readonly [number, number, number] | null {
+  const match = value.match(/\bv?(\d+)\.(\d+)\.(\d+)\b/);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+export function claudeSupportsRestricted(cliVersion: string): boolean {
+  const version = parseVersion(cliVersion);
+  if (!version) return false;
+  const minimum: readonly [number, number, number] = [2, 1, 248];
+  for (let index = 0; index < minimum.length; index += 1) {
+    if (version[index]! > minimum[index]!) return true;
+    if (version[index]! < minimum[index]!) return false;
+  }
+  return true;
+}
+
 export function buildClaudeInvocation(request: AdapterRunRequest, discovery: AdapterDiscovery): InvocationPlan {
   validateAdapterRunRequest(request);
   if (request.adapterId !== 'anthropic-claude-code') throw new TypeError('request is not for Claude Code');
@@ -40,23 +57,21 @@ export function buildClaudeInvocation(request: AdapterRunRequest, discovery: Ada
   const posture = requireConfigurationPosture(request.configurationPosture);
 
   const args: string[] = ['-p', request.prompt, '--output-format', 'json'];
-  if (posture === 'CONTROLLED_BARE') {
-    args.push('--bare');
-  } else {
-    args.push('--setting-sources', '', '--strict-mcp-config');
-  }
-
   if (request.posture === 'READ_ONLY') {
-    args.push('--permission-mode', 'plan', '--tools', 'Read,Glob,Grep');
+    if (posture !== 'CONTROLLED_STANDARD') throw new TypeError('Claude READ_ONLY requires CONTROLLED_STANDARD so restricted mode owns configuration isolation');
+    if (!claudeSupportsRestricted(discovery.cliVersion)) throw new TypeError('Claude READ_ONLY requires Claude Code >= 2.1.248 with --restricted support');
+    args.push('--restricted', '--permission-mode', 'plan', '--tools', 'Read,Glob,Grep', '--disallowedTools', 'mcp__*');
   } else {
-    args.push('--permission-mode', 'dontAsk', '--allowedTools', 'Read,Glob,Grep,Edit,Write');
+    if (posture === 'CONTROLLED_BARE') args.push('--bare');
+    else args.push('--setting-sources', '', '--strict-mcp-config');
+    args.push('--permission-mode', 'dontAsk', '--tools', 'Read,Glob,Grep,Edit,Write');
   }
   if (request.model !== undefined) args.push('--model', request.model);
   if (request.maxTurns !== undefined) args.push('--max-turns', String(request.maxTurns));
   if (request.maxBudgetUsd !== undefined) args.push('--max-budget-usd', String(request.maxBudgetUsd));
   if (request.sessionId !== undefined) args.push('--resume', request.sessionId);
 
-  if (args.includes('--dangerously-skip-permissions') || args.includes('bypassPermissions')) throw new Error('dangerous Claude permission bypass generated');
+  if (args.includes('--dangerously-skip-permissions') || args.includes('--allow-dangerously-skip-permissions') || args.includes('bypassPermissions')) throw new Error('dangerous Claude permission bypass generated');
 
   return {
     adapterId: request.adapterId,
@@ -107,6 +122,7 @@ export function runClaude(request: AdapterRunRequest, discovery: AdapterDiscover
     cancel: () => supervised.cancel(),
     result: (async (): Promise<AdapterRunResult> => {
       const processResult = await supervised.result;
+      const mechanism = processEvidence(processResult);
       const processStatus = statusFromProcess(processResult);
       const identityBase: ExecutionIdentity = {
         adapterId: 'anthropic-claude-code',
@@ -118,18 +134,18 @@ export function runClaude(request: AdapterRunRequest, discovery: AdapterDiscover
         observedProvider: null,
         sessionId: request.sessionId ?? null,
       };
-      if (processStatus !== null) return { status: processStatus, identity: identityBase, finalMessage: null, processCause: processResult.cause, exitCode: processResult.exitCode, stderr: processResult.stderr, warnings: [] };
+      if (processStatus !== null) return { status: processStatus, identity: identityBase, finalMessage: null, ...mechanism, stderr: processResult.stderr, warnings: [] };
 
       const parsed = parseClaudeJson(processResult.stdout);
       const identity: ExecutionIdentity = { ...identityBase, observedModel: parsed.observedModel, sessionId: parsed.sessionId ?? identityBase.sessionId };
       if (processResult.exitCode !== 0) {
         const status = authFailureText(`${processResult.stderr}\n${processResult.stdout}`) ? 'AUTH_FAILED' : 'PROVIDER_FAILED';
-        return { status, identity, finalMessage: parsed.finalMessage, processCause: processResult.cause, exitCode: processResult.exitCode, stderr: processResult.stderr, warnings: parsed.warnings };
+        return { status, identity, finalMessage: parsed.finalMessage, ...mechanism, stderr: processResult.stderr, warnings: parsed.warnings };
       }
       if (parsed.invalid || parsed.providerFailed || parsed.finalMessage === null) {
-        return { status: parsed.providerFailed ? 'PROVIDER_FAILED' : 'INVALID_PROVIDER_OUTPUT', identity, finalMessage: parsed.finalMessage, processCause: processResult.cause, exitCode: processResult.exitCode, stderr: processResult.stderr, warnings: parsed.warnings };
+        return { status: parsed.providerFailed ? 'PROVIDER_FAILED' : 'INVALID_PROVIDER_OUTPUT', identity, finalMessage: parsed.finalMessage, ...mechanism, stderr: processResult.stderr, warnings: parsed.warnings };
       }
-      return { status: 'COMPLETED', identity, finalMessage: parsed.finalMessage, processCause: processResult.cause, exitCode: processResult.exitCode, stderr: processResult.stderr, warnings: parsed.warnings };
+      return { status: 'COMPLETED', identity, finalMessage: parsed.finalMessage, ...mechanism, stderr: processResult.stderr, warnings: parsed.warnings };
     })(),
   };
 }

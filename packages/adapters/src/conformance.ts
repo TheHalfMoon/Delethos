@@ -1,4 +1,4 @@
-import type { AdapterId, PlatformId } from './types.ts';
+import type { AdapterCleanupStatus, AdapterId, AdapterProcessCause, AdapterResultStatus, AdapterTerminationStrategy, PlatformId } from './types.ts';
 
 export type ConformanceSource = 'DETERMINISTIC_FIXTURE' | 'REAL_CLI';
 export type ConformanceOutcome = 'PASS' | 'FAIL' | 'UNAVAILABLE' | 'UNVERIFIED';
@@ -28,8 +28,26 @@ export type ConformanceCaseId =
   | 'machine-result'
   | 'config-isolation';
 
+export interface ConformanceFacts {
+  readonly adapterStatus: AdapterResultStatus | null;
+  readonly processCause: AdapterProcessCause | null;
+  readonly exitCode: number | null;
+  readonly terminationStrategy: AdapterTerminationStrategy | null;
+  readonly terminationAttempted: boolean | null;
+  readonly cleanupStatus: AdapterCleanupStatus | null;
+  readonly elapsedMs: number | null;
+  readonly stdoutBytes: number | null;
+  readonly stderrBytes: number | null;
+  readonly retainedBytes: number | null;
+  readonly outputTruncated: boolean | null;
+  readonly headUnchanged: boolean | null;
+  readonly worktreeDirty: boolean | null;
+  readonly markerObserved: boolean | null;
+  readonly finalMessagePresent: boolean | null;
+}
+
 export interface ConformanceRecord {
-  readonly schema: 'delethos.adapter-conformance.candidate.1';
+  readonly schema: 'delethos.adapter-conformance.candidate.2';
   readonly source: ConformanceSource;
   readonly adapterId: AdapterId;
   readonly delethosRevision: string;
@@ -40,10 +58,12 @@ export interface ConformanceRecord {
   readonly caseId: ConformanceCaseId;
   readonly outcome: ConformanceOutcome;
   readonly detail: string | null;
+  readonly facts: ConformanceFacts | null;
 }
 
 export const BASELINE_GOLD_CASES: readonly ConformanceCaseId[] = [
   'discovery-version',
+  'missing-binary',
   'auth-failure',
   'write-success',
   'exact-cwd',
@@ -55,6 +75,7 @@ export const BASELINE_GOLD_CASES: readonly ConformanceCaseId[] = [
   'missing-final-response',
   'large-output',
   'special-paths',
+  'dirty-precondition',
   'platform-launch',
   'no-hidden-git-write',
   'machine-result',
@@ -73,10 +94,10 @@ function boundedDetail(detail: string | null): string | null {
   return detail.replace(/[\r\n\t]+/g, ' ').slice(0, 2048);
 }
 
-export function makeConformanceRecord(input: Omit<ConformanceRecord, 'schema' | 'detail'> & { readonly detail?: string | null }): ConformanceRecord {
+export function makeConformanceRecord(input: Omit<ConformanceRecord, 'schema' | 'detail' | 'facts'> & { readonly detail?: string | null; readonly facts?: ConformanceFacts | null }): ConformanceRecord {
   if (!/^[0-9a-f]{40}$/i.test(input.delethosRevision)) throw new TypeError('delethosRevision must be an exact 40-hex commit');
   if (input.cliVersion !== null && (input.cliVersion.length === 0 || input.cliVersion.length > 512)) throw new TypeError('cliVersion must be bounded');
-  return { ...input, schema: 'delethos.adapter-conformance.candidate.1', detail: boundedDetail(input.detail ?? null) };
+  return { ...input, schema: 'delethos.adapter-conformance.candidate.2', detail: boundedDetail(input.detail ?? null), facts: input.facts ?? null };
 }
 
 export interface GoldAssessment {
