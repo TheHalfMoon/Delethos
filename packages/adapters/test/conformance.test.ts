@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { assessGold, BASELINE_GOLD_CASES, makeConformanceRecord } from '../src/index.ts';
 
 const sha = 'a'.repeat(40);
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 function record(
   source: 'DETERMINISTIC_FIXTURE' | 'REAL_CLI',
@@ -98,8 +100,8 @@ test('conformance record is exact-revision, machine-fact carrying, and detail bo
 });
 
 test('real conformance runner is executable without vendor credentials for missing-binary negative path', () => {
-  const result = spawnSync(process.execPath, [resolve('scripts/adapter-conformance.mjs'), '--adapter', 'codex', '--case', 'missing-binary'], {
-    cwd: resolve('.'), encoding: 'utf8', timeout: 30_000,
+  const result = spawnSync(process.execPath, [resolve(repoRoot, 'scripts/adapter-conformance.mjs'), '--adapter', 'codex', '--case', 'missing-binary'], {
+    cwd: repoRoot, encoding: 'utf8', timeout: 30_000,
   });
   assert.equal(result.status, 0, result.stderr);
   const recordValue = JSON.parse(result.stdout.trim()) as { schema: string; caseId: string; source: string; outcome: string; executablePath: string | null; facts: { headUnchanged: boolean; refsUnchanged: boolean } };

@@ -253,7 +253,7 @@ async function main() {
     baselineRefs = gitRefs(repo);
 
     if (selected.case === 'missing-binary') {
-      const missing = await resolveExecutable(`delethos-definitely-missing-${process.pid}`, '');
+      const missing = await resolveExecutable(`delethos-definitely-missing-${process.pid}`);
       const observation = await observe();
       emit(missing.state === 'NOT_INSTALLED' && observation.headUnchanged && observation.refsUnchanged ? 'PASS' : 'FAIL', `missing-state=${missing.state}`, facts(null, observation), null);
       return;
@@ -383,7 +383,7 @@ async function main() {
       const marker = `DELETHOS_PARTIAL_${process.pid}`;
       const handle = startAgent(selected.adapter, discovery, repo, { timeoutMs: 120_000, prompt: `Append a new line containing exactly ${marker} to fixture.txt as your first action. Do not commit, push, merge, create refs, or touch other files. After the edit, continue reading fixture.txt until interrupted.` });
       let settled = false;
-      handle.result.finally(() => { settled = true; });
+      void handle.result.then(() => { settled = true; }, () => { settled = true; });
       for (let index = 0; index < 300 && !settled; index += 1) {
         if (await fileContains(join(repo, 'fixture.txt'), marker)) { handle.cancel(); break; }
         await sleep(100);
