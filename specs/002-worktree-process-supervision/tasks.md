@@ -2,11 +2,11 @@
 
 ## Status legend
 
-- `[x]` shaping item completed in this candidate; authority becomes effective only after exact shaping merge/re-read.
-- `[ ]` product/evidence work not yet complete.
+- `[x]` shaping/research item has been completed in the referenced candidate or live canonical history.
+- `[ ]` product/evidence work is not yet complete or still requires exact merge/effectivity observation.
 - Live canonical repository/GitHub truth overrides checkbox text.
 
-## Phase S — Shaping
+## Phase S — Initial shaping and activation
 
 - [x] **D002-T001** Re-read canonical post-001 authority and prove Specification 001 closeout effectivity.
 - [x] **D002-T002** Research current Git worktree porcelain/lock/remove behavior from primary Git documentation.
@@ -15,16 +15,27 @@
 - [x] **D002-T005** Define the bounded exact-base worktree and process-supervision outcome.
 - [x] **D002-T006** Define explicit sandbox/process-containment non-claims and Rust/native recovery threshold.
 - [x] **D002-T007** Define authorized implementation path surface, acceptance criteria, platform evidence, and recovery behavior.
-- [ ] **D002-T008** Qualify exact shaping PR base/head/scope/CI/reviews/threads/comments/mergeability.
-- [ ] **D002-T009** Merge exact shaping head with expected-head protection and re-read canonical authority.
+- [x] **D002-T008** Qualify exact initial shaping PR base/head/scope/CI/reviews/threads/comments/mergeability.
+- [x] **D002-T009** Merge exact initial shaping head with expected-head protection and re-read canonical authority; activation merge `39b10c6585f6201bb22ab2620013f6e1b76396ab`, push CI `33502613669` SUCCESS.
+
+## Phase S2 — Mandatory Git execution-safety correction
+
+Fresh primary-source verification after activation found that normal `git worktree add` invokes `post-checkout`, checkout/status may execute configured external filter commands, and `core.fsmonitor` may name an external hook command.
+
+- [x] **D002-T009A** Verify the `post-checkout`, filter-driver, and fsmonitor execution surfaces from current primary Git documentation.
+- [x] **D002-T009B** Shape normative Amendment 001 with command-scoped hook/filter/fsmonitor suppression and explicit residual concurrency limitations.
+- [x] **D002-T009C** Add mandatory hostile hook/filter fixtures to the Specification 002 acceptance path without expanding the authorized product path set.
+- [ ] **D002-T009D** Qualify the exact Amendment 001 PR base/head/scope/CI/reviews/threads/comments/mergeability.
+- [ ] **D002-T009E** Merge the exact Amendment 001 head with expected-head protection and re-read canonical authority before product implementation.
 
 ## Phase A — Repository runtime facts
 
 - [ ] **D002-T010** Create private `@delethos/runtime` package with zero external production dependencies.
-- [ ] **D002-T011** Implement shell-free Git execution helper with bounded output/error handling.
-- [ ] **D002-T012** Validate repository/non-bare preconditions and resolve top-level/common-dir/HEAD/branch/dirty facts.
+- [ ] **D002-T011** Implement shell-free Git execution helper with bounded output/error handling, inherited `GIT_*` control-variable removal, `GIT_TERMINAL_PROMPT=0`, and command-scoped `core.fsmonitor=false`.
+- [ ] **D002-T012** Validate repository/non-bare preconditions and resolve top-level/common-dir/HEAD/branch/dirty facts without executing configured external filter/fsmonitor commands.
 - [ ] **D002-T013** Validate exact 40-hex base SHA and resolve it as a commit object.
 - [ ] **D002-T014** Record observed Git version without turning it into an unsupported compatibility claim.
+- [ ] **D002-T015** Discover configured clean/smudge/process filter-driver names immediately before relevant Git worktree/status operations.
 
 ## Phase B — Worktree lifecycle
 
@@ -37,6 +48,7 @@
 - [ ] **D002-T026** Implement clean-only unlock/remove and owned temp-parent cleanup.
 - [ ] **D002-T027** Refuse dirty cleanup and preserve partial work.
 - [ ] **D002-T028** Attempt bounded re-lock if clean removal fails after unlock.
+- [ ] **D002-T029** Suppress `post-checkout` through a fresh empty hooks path and suppress every observed configured clean/smudge/process driver with `required=false` during relevant Git operations; expose suppressed driver names.
 
 ## Phase C — Process request and output
 
@@ -65,6 +77,9 @@
 - [ ] **D002-T054** Test owned worktree discovery.
 - [ ] **D002-T055** Test clean cleanup success.
 - [ ] **D002-T056** Test dirty cleanup refusal and content preservation.
+- [ ] **D002-T057** Test hostile executable `post-checkout` hook suppression on every required OS.
+- [ ] **D002-T058** Test hostile clean/smudge/process filter suppression, `required=true` neutralization, committed-representation behavior, and suppressed-driver reporting on every required OS.
+- [ ] **D002-T059** Test inherited `GIT_*` control variables cannot redirect the bounded runtime fixture away from its explicit repository inputs.
 
 ## Phase F — Process evidence
 
@@ -102,7 +117,7 @@
 
 - [ ] **D002-T090** Produce exact implementation/evidence reconciliation.
 - [ ] **D002-T091** Record actual Node/pnpm/TypeScript/Git/action versions and exact workflow/job IDs.
-- [ ] **D002-T092** Record worktree/process cleanup limitations and any observed platform asymmetry.
+- [ ] **D002-T092** Record worktree/process cleanup, Git filter/hook suppression, checkout-hydration, concurrency, and platform-containment limitations.
 - [ ] **D002-T093** Confirm zero Specification 003+ behavior entered the runtime.
-- [ ] **D002-T094** Close Specification 002 only when every acceptance/evidence gate is machine-observed.
+- [ ] **D002-T094** Close Specification 002 only when every acceptance/evidence gate, including Amendment 001 hostile fixtures, is machine-observed.
 - [ ] **D002-T095** Re-read canonical `main` and return to bounded successor shaping without auto-activating Specification 003 from roadmap order.
