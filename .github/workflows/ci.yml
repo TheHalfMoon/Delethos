@@ -166,19 +166,24 @@ jobs:
 
           $arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
           if ($arch -eq 'x64') {
-            $platformPackage = 'codex-win32-x64'
             $targetTriple = 'x86_64-pc-windows-msvc'
           } elseif ($arch -eq 'arm64') {
-            $platformPackage = 'codex-win32-arm64'
             $targetTriple = 'aarch64-pc-windows-msvc'
           } else {
             throw "unsupported hosted qualification Windows architecture $arch"
           }
 
-          $source = Join-Path $installRoot "node_modules\@openai\codex\node_modules\@openai\$platformPackage\vendor\$targetTriple\bin\codex.exe"
-          if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
-            throw "pinned Codex native executable was not found at $source"
+          $nodeModules = Join-Path $installRoot 'node_modules'
+          $suffix = "\vendor\$targetTriple\bin\codex.exe"
+          $matches = @(
+            Get-ChildItem -LiteralPath $nodeModules -Recurse -File -Filter 'codex.exe' |
+              Where-Object { $_.FullName.EndsWith($suffix, [System.StringComparison]::OrdinalIgnoreCase) }
+          )
+          if ($matches.Count -ne 1) {
+            $observedPaths = ($matches | ForEach-Object { $_.FullName }) -join '; '
+            throw "expected exactly one pinned Codex native executable for $targetTriple; found $($matches.Count): $observedPaths"
           }
+          $source = $matches[0].FullName
 
           $binDir = Join-Path $env:RUNNER_TEMP 'delethos-codex-bin'
           New-Item -ItemType Directory -Force -Path $binDir | Out-Null
