@@ -11,7 +11,7 @@
 **Specification 002 canonical implementation CI:** `33506061231` — `SUCCESS` on Linux/macOS/Windows  
 **Specification 002 terminal closeout merge:** `fbeac74feb846d4ed63cdcc8f366eb435481057e`  
 **Specification 002 post-closeout CI:** `33507203048` — `SUCCESS` on Linux/macOS/Windows  
-**State represented by this file when canonical:** `SPEC_003_ACTIVE`  
+**State represented by this file when canonical:** `SPEC_003_ACTIVE_BLOCKED_REAL_GOLD`  
 **Active product specification when canonical:** `specs/003-adapter-sdk-gold-pair/spec.md`
 
 Live GitHub/repository truth overrides this file.
@@ -41,7 +41,7 @@ windows_job = 99853980271 = SUCCESS
 When this file and `specs/003-adapter-sdk-gold-pair/` are canonical together, Specification 003 is the sole active product implementation authority.
 
 ```text
-PROGRAM_STATUS = SPEC_003_ACTIVE
+PROGRAM_STATUS = SPEC_003_ACTIVE_BLOCKED_REAL_GOLD
 ACTIVE_PRODUCT_SPEC = specs/003-adapter-sdk-gold-pair/spec.md
 PRODUCT_IMPLEMENTATION_AUTHORITY = SPEC_003_ADAPTER_SDK_AND_TWO_GOLD_CANDIDATES_ONLY
 NEXT_ALLOWED_WORK = SPEC_003_TASK_ORDER_ONLY
@@ -57,6 +57,34 @@ anthropic-claude-code
 `Gold candidate` is not the public `GOLD` tier. Neither candidate may be represented as `GOLD` before the exact applicable real-CLI conformance required by Specification 003 is machine-observed.
 
 Gemini CLI and OpenCode remain researched successor candidates only; they are not Specification 003 implementation authority unless a later canonical amendment changes the selected pair from evidence.
+
+## Current Specification 003 evidence frontier
+
+The deterministic implementation is canonical. The latest reconciled hosted Codex no-auth evidence is also canonical and does not constitute Gold.
+
+```text
+SPEC_003_IMPLEMENTATION_REVISION = 05ab40fa224f046c6139d52ce4421579d94b5593
+SPEC_003_IMPLEMENTATION_CI = 33529134266
+CODEX_HOSTED_NOAUTH_SOURCE_REVISION = 6f60edc8b388eca0476050ee9a87536166348fac
+CODEX_HOSTED_NOAUTH_RUN = 33560429571
+CODEX_HOSTED_NOAUTH_EVIDENCE_RECONCILIATION_MERGE = 6889ecbf2dea719e990eef90c0fd1deb39f7b1f6
+CODEX_HOSTED_NOAUTH_EVIDENCE_POST_MERGE_CI = 33561052426
+CODEX_HOSTED_NOAUTH_CASES = missing-binary:PASS discovery-version:PASS platform-launch:PASS auth-failure:PASS
+CODEX_HOSTED_NOAUTH_MATRIX = linux/x64:PASS macos/arm64:PASS windows/x64:PASS
+D003_T101 = COMPLETE
+CODEX_GOLD = NOT_QUALIFIED
+CLAUDE_VENDOR_USE_AUTHORITY = NOT_ESTABLISHED_IN_CANONICAL_EVIDENCE
+CLAUDE_HOSTED_NOAUTH_EXECUTION = PROHIBITED_WHILE_GATE_UNSATISFIED
+CLAUDE_GOLD = NOT_QUALIFIED
+TERMINAL_SPEC_003_CLOSEOUT = NOT_AUTHORIZED
+SPEC_004 = NOT_AUTHORIZED
+```
+
+Run `33560429571` used exact `codex-cli 0.152.0`. Its `auth-failure` case was status-only in an isolated unauthenticated environment and did not dispatch an agent/model request. The subsequent evidence reconciliation merge `6889ecbf2dea719e990eef90c0fd1deb39f7b1f6` passed canonical post-merge deterministic CI run `33561052426` on Linux, macOS, and Windows; the marker-gated hosted Codex job was skipped on that documentation-only push as expected.
+
+Only `D003-T101` is completed by this hosted subset. `D003-T100` remains an ongoing exact-identity requirement for future qualified runs; the remaining Phase H tasks still require their applicable real credentialed/provider-backed evidence. All Phase I real qualification tasks remain evidence-gated. Phase K remains blocked until both selected candidates genuinely satisfy the Gold gate.
+
+Canonical Amendment 003 requires genuine, bounded, non-secret project evidence establishing vendor-use authority before any hosted Claude Code installation or execution. Ordinary founder approval, public release availability, repository ownership, or technical installability does not satisfy that vendor-use gate. Any future Claude execution must also revalidate the authority immediately before execution and freshly verify the official signing key fingerprint, detached manifest signature, artifact integrity, executable integrity, and exact CLI version.
 
 ## Specification 003 implementation surface
 
@@ -139,4 +167,10 @@ At Specification 003 shaping time, `main` remains unprotected and no repository 
 
 ## Continuation
 
-Qualify and merge the exact Specification 003 shaping candidate. Re-read canonical `main`. Only if this specification is active canonically may implementation begin, in `tasks.md` order and strictly inside the authorized product surface. Do not begin Specification 004 from roadmap text, and do not represent either selected adapter as `GOLD` before real conformance proves it.
+Continue Specification 003 only in canonical task order and only from exact live evidence.
+
+For Codex, the Amendment 001 no-auth subset is complete and reconciled, but the remaining Phase H Gold surface requires genuine credentialed/provider-backed execution environments and exact machine-observed results. Do not convert missing credentials, provider availability, or unexecuted cases into PASS.
+
+For Claude Code, do not download, install, unpack, or execute a hosted binary while `CLAUDE_VENDOR_USE_AUTHORITY` remains unestablished or stale under Amendment 003. If genuine bounded authority evidence becomes canonical, revalidate it immediately before any separately authorized execution unit and follow the fresh signed-manifest/fingerprint provenance gate.
+
+Do not produce terminal Specification 003 closeout or begin Specification 004 unless both selected candidates are genuinely `GOLD` under the complete applicable real-CLI evidence matrix and the resulting closeout is itself qualified and merged canonically.
