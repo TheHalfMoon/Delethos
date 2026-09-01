@@ -60,7 +60,7 @@ Gemini CLI and OpenCode remain researched successor candidates only; they are no
 
 ## Current Specification 003 evidence frontier
 
-The deterministic implementation is canonical. The latest reconciled hosted Codex no-auth evidence is also canonical and does not constitute Gold.
+The deterministic implementation is canonical. The hosted Codex no-auth subset is canonically reconciled. A separately authorized hosted Claude sentinel missing-executable observation is now machine-observed but remains only a partial Phase I sub-fact and does not constitute vendor execution or Gold.
 
 ```text
 SPEC_003_IMPLEMENTATION_REVISION = 05ab40fa224f046c6139d52ce4421579d94b5593
@@ -73,6 +73,11 @@ CODEX_HOSTED_NOAUTH_CASES = missing-binary:PASS discovery-version:PASS platform-
 CODEX_HOSTED_NOAUTH_MATRIX = linux/x64:PASS macos/arm64:PASS windows/x64:PASS
 D003_T101 = COMPLETE
 CODEX_GOLD = NOT_QUALIFIED
+CLAUDE_SENTINEL_MISSING_SOURCE_REVISION = f1513318f740d66ab10575d59a112717f60a5ae4
+CLAUDE_SENTINEL_MISSING_RUN = 33566060117
+CLAUDE_SENTINEL_MISSING_CASE = missing-binary:PASS
+CLAUDE_SENTINEL_MISSING_MATRIX = linux/x64:PASS macos/arm64:PASS windows/x64:PASS
+D003_T121 = OPEN_PARTIAL_MISSING_BINARY_SUBFACT_ONLY
 CLAUDE_VENDOR_USE_AUTHORITY = NOT_ESTABLISHED_IN_CANONICAL_EVIDENCE
 CLAUDE_HOSTED_NOAUTH_EXECUTION = PROHIBITED_WHILE_GATE_UNSATISFIED
 CLAUDE_GOLD = NOT_QUALIFIED
@@ -82,9 +87,15 @@ SPEC_004 = NOT_AUTHORIZED
 
 Run `33560429571` used exact `codex-cli 0.152.0`. Its `auth-failure` case was status-only in an isolated unauthenticated environment and did not dispatch an agent/model request. The subsequent evidence reconciliation merge `6889ecbf2dea719e990eef90c0fd1deb39f7b1f6` passed canonical post-merge deterministic CI run `33561052426` on Linux, macOS, and Windows; the marker-gated hosted Codex job was skipped on that documentation-only push as expected.
 
-Only `D003-T101` is completed by this hosted subset. `D003-T100` remains an ongoing exact-identity requirement for future qualified runs; the remaining Phase H tasks still require their applicable real credentialed/provider-backed evidence. All Phase I real qualification tasks remain evidence-gated. Phase K remains blocked until both selected candidates genuinely satisfy the Gold gate.
+Only `D003-T101` is completed by the hosted Codex subset. `D003-T100` remains an ongoing exact-identity requirement for future qualified runs; the remaining Phase H tasks still require their applicable real credentialed/provider-backed evidence.
 
-Canonical Amendment 003 requires genuine, bounded, non-secret project evidence establishing vendor-use authority before any hosted Claude Code installation or execution. Ordinary founder approval, public release availability, repository ownership, or technical installability does not satisfy that vendor-use gate. Any future Claude execution must also revalidate the authority immediately before execution and freshly verify the official signing key fingerprint, detached manifest signature, artifact integrity, executable integrity, and exact CLI version.
+Canonical Amendment 004 authorized only the existing sentinel `missing-binary` conformance branch under the Claude candidate identity. Canonical run `33566060117` at exact revision `f1513318f740d66ab10575d59a112717f60a5ae4` completed successfully with Linux/x64, macOS/arm64, and Windows/x64 each observing PASS. Each platform first machine-verified that the bounded `missing-binary` branch retained the deliberate `delethos-definitely-missing-${process.pid}` sentinel and contained no `discoverAdapter`, `startAgent`, `runClaude`, or `authState` call before emitting the record. The records reported `adapterId = anthropic-claude-code`, `executablePath = null`, `cliVersion = null`, `detail = missing-state=NOT_INSTALLED`, and clean Git head/refs/worktree facts.
+
+That result does **not** establish whether the actual Claude Code executable is installed on any runner. The case intentionally does not test that proposition and no Anthropic binary was discovered or executed. It establishes only the missing-executable conformance sub-fact for `D003-T121`; the task remains open because invalid/missing-auth behavior still requires actual Claude execution.
+
+Canonical Amendment 003 remains fully controlling for any actual Claude Code installation, discovery, or execution. It requires genuine, bounded, non-secret project evidence establishing vendor-use authority before hosted Claude Code use. Ordinary founder approval, public release availability, repository ownership, technical installability, or the sentinel observation does not satisfy that vendor-use gate. Any future Claude execution must also revalidate the authority immediately before execution and freshly verify the official signing key fingerprint, detached manifest signature, artifact integrity, executable integrity, and exact CLI version.
+
+All remaining Phase I executable-present/provider-backed work remains evidence-gated. Phase K remains blocked until both selected candidates genuinely satisfy the Gold gate.
 
 ## Specification 003 implementation surface
 
@@ -171,6 +182,6 @@ Continue Specification 003 only in canonical task order and only from exact live
 
 For Codex, the Amendment 001 no-auth subset is complete and reconciled, but the remaining Phase H Gold surface requires genuine credentialed/provider-backed execution environments and exact machine-observed results. Do not convert missing credentials, provider availability, or unexecuted cases into PASS.
 
-For Claude Code, do not download, install, unpack, or execute a hosted binary while `CLAUDE_VENDOR_USE_AUTHORITY` remains unestablished or stale under Amendment 003. If genuine bounded authority evidence becomes canonical, revalidate it immediately before any separately authorized execution unit and follow the fresh signed-manifest/fingerprint provenance gate.
+For Claude Code, the Amendment 004 sentinel missing-executable sub-fact is machine-observed, but `D003-T121` remains open and no actual vendor executable behavior is qualified. Do not download, install, discover, unpack, or execute a hosted Claude binary while `CLAUDE_VENDOR_USE_AUTHORITY` remains unestablished or stale under Amendment 003. If genuine bounded authority evidence becomes canonical, revalidate it immediately before any separately authorized execution unit and follow the fresh signed-manifest/fingerprint provenance gate.
 
 Do not produce terminal Specification 003 closeout or begin Specification 004 unless both selected candidates are genuinely `GOLD` under the complete applicable real-CLI evidence matrix and the resulting closeout is itself qualified and merged canonically.
