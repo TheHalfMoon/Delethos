@@ -63,7 +63,7 @@ function parseArgs(argv) {
 }
 
 function requestedPosture(caseId) {
-  if (caseId === 'missing-binary' || caseId === 'discovery-version' || caseId === 'platform-launch') return null;
+  if (caseId === 'missing-binary' || caseId === 'discovery-version' || caseId === 'platform-launch' || caseId === 'auth-failure') return null;
   if (caseId === 'read-only' || caseId === 'forbidden-write') return 'READ_ONLY';
   return 'WRITE';
 }
@@ -182,7 +182,7 @@ function startAgent(adapter, discovery, cwd, options = {}) {
 
 async function gitObservation(repo, baselineHead, baselineRefs, marker = null) {
   const head = gitText(['rev-parse', 'HEAD'], repo);
-  const refs = gitRefs(repo);
+  const refs = gitRefs(cwd);
   const status = gitText(['status', '--porcelain=v1', '--untracked-files=all'], repo);
   const diff = gitDiff(repo);
   return {
