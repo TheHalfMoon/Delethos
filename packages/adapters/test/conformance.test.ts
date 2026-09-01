@@ -11,6 +11,7 @@ const sha = 'a'.repeat(40);
 const emptyDiffDigest = '0'.repeat(64);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const runner = resolve(repoRoot, 'scripts/adapter-conformance.mjs');
+const workflow = resolve(repoRoot, '.github/workflows/ci.yml');
 
 function record(
   source: 'DETERMINISTIC_FIXTURE' | 'REAL_CLI',
@@ -154,6 +155,27 @@ test('real conformance runner requires explicit acknowledgement before write-cap
   });
   assert.equal(result.status, 2);
   assert.match(result.stderr, /requires explicit --ack-write acknowledgement/);
+});
+
+test('real conformance auth-failure is status-only, posture-neutral, and cannot dispatch an agent', () => {
+  const source = readFileSync(runner, 'utf8');
+  assert.match(source, /caseId === 'auth-failure'\) return null/);
+  const start = source.indexOf("if (selected.case === 'auth-failure')");
+  const end = source.indexOf('\n    const credentialState', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const branch = source.slice(start, end);
+  assert.match(branch, /isolatedUnauthenticatedEnvironment/);
+  assert.match(branch, /authState/);
+  assert.match(branch, /auth-status=/);
+  assert.doesNotMatch(branch, /startAgent|runCodex|runClaude/);
+});
+
+test('hosted Codex no-auth workflow runs every Amendment 001 case', () => {
+  const source = readFileSync(workflow, 'utf8');
+  for (const caseId of ['missing-binary', 'discovery-version', 'platform-launch', 'auth-failure']) {
+    assert.match(source, new RegExp(`--adapter codex --case ${caseId} --output stdout`));
+  }
 });
 
 test('real conformance runner refuses evidence output inside canonical mutable work', () => {
