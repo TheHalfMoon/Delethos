@@ -23,6 +23,20 @@ test('adapter discovery records exact path and version without auth inference', 
   assert.match(result.cliVersion ?? '', /^v?\d+/);
 });
 
+test('version discovery fails closed on nonzero exit or empty version output', async () => {
+  const nonzero = await discoverAdapter({ ...CODEX_DEFINITION, versionArgs: ['-e', 'process.exit(7)'] }, process.cwd(), process.execPath);
+  assert.equal(nonzero.state, 'DISCOVERY_FAILED');
+  assert.equal(nonzero.executablePath !== null, true);
+  assert.equal(nonzero.cliVersion, null);
+  assert.match(nonzero.detail ?? '', /EXITED\/7/);
+
+  const empty = await discoverAdapter({ ...CODEX_DEFINITION, versionArgs: ['-e', ''] }, process.cwd(), process.execPath);
+  assert.equal(empty.state, 'DISCOVERY_FAILED');
+  assert.equal(empty.executablePath !== null, true);
+  assert.equal(empty.cliVersion, null);
+  assert.match(empty.detail ?? '', /no version text/);
+});
+
 test('PATH ambiguity fails closed when distinct executables exist', async () => {
   const root = await mkdtemp(join(tmpdir(), 'delethos-discovery-'));
   try {
