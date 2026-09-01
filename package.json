@@ -1,0 +1,19 @@
+{
+  "name": "delethos",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=24.12.0 <25"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test packages/core/test/canonical.test.ts packages/core/test/policy.test.ts packages/core/test/run.test.ts packages/core/test/evidence.test.ts",
+    "check:runtime-deps": "node -e \"const p=require('./packages/core/package.json'); const d=Object.keys(p.dependencies||{}); if(d.length){console.error('runtime dependencies are forbidden:',d.join(',')); process.exit(1)}\"",
+    "check": "pnpm typecheck && pnpm test && pnpm check:runtime-deps"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "7.0.2"
+  }
+}
