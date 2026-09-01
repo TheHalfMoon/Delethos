@@ -41,6 +41,7 @@ export interface ConformanceFacts {
   readonly retainedBytes: number | null;
   readonly outputTruncated: boolean | null;
   readonly headUnchanged: boolean | null;
+  readonly refsUnchanged: boolean | null;
   readonly worktreeDirty: boolean | null;
   readonly markerObserved: boolean | null;
   readonly finalMessagePresent: boolean | null;
@@ -94,6 +95,10 @@ function boundedDetail(detail: string | null): string | null {
   return detail.replace(/[\r\n\t]+/g, ' ').slice(0, 2048);
 }
 
+function exactRevision(value: string): void {
+  if (!/^[0-9a-f]{40}$/i.test(value)) throw new TypeError('expectedRevision must be an exact 40-hex commit');
+}
+
 export function makeConformanceRecord(input: Omit<ConformanceRecord, 'schema' | 'detail' | 'facts'> & { readonly detail?: string | null; readonly facts?: ConformanceFacts | null }): ConformanceRecord {
   if (!/^[0-9a-f]{40}$/i.test(input.delethosRevision)) throw new TypeError('delethosRevision must be an exact 40-hex commit');
   if (input.cliVersion !== null && (input.cliVersion.length === 0 || input.cliVersion.length > 512)) throw new TypeError('cliVersion must be bounded');
@@ -107,17 +112,42 @@ export interface GoldAssessment {
 
 export function assessGold(
   adapterId: AdapterId,
+  expectedRevision: string,
   records: readonly ConformanceRecord[],
   claimedCases: readonly ConformanceCaseId[] = BASELINE_GOLD_CASES,
   platforms: readonly PlatformId[] = ['linux', 'macos', 'windows'],
 ): GoldAssessment {
+  exactRevision(expectedRevision);
   const missing: string[] = [];
+
   for (const platform of platforms) {
+    const exactPass = records.filter((record) =>
+      record.adapterId === adapterId
+      && record.platform === platform
+      && record.source === 'REAL_CLI'
+      && record.outcome === 'PASS'
+      && record.delethosRevision === expectedRevision
+      && record.facts !== null
+      && record.facts.headUnchanged === true
+      && record.facts.refsUnchanged === true,
+    );
+
+    const versions = new Set(exactPass
+      .filter((record) => record.caseId !== 'missing-binary' && record.cliVersion !== null)
+      .map((record) => record.cliVersion));
+    if (versions.size === 0) missing.push(`${platform}:cli-version`);
+    else if (versions.size > 1) missing.push(`${platform}:cli-version-consistency`);
+
     for (const caseId of claimedCases) {
-      const pass = records.some((record) => record.adapterId === adapterId && record.platform === platform && record.caseId === caseId && record.source === 'REAL_CLI' && record.outcome === 'PASS');
+      const pass = exactPass.some((record) => {
+        if (record.caseId !== caseId) return false;
+        if (caseId === 'missing-binary') return record.executablePath === null && record.cliVersion === null;
+        return record.executablePath !== null && record.cliVersion !== null;
+      });
       if (!pass) missing.push(`${platform}:${caseId}`);
     }
   }
+
   return { eligible: missing.length === 0, missing };
 }
 

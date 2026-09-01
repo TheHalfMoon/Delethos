@@ -48,12 +48,26 @@ function gitText(args, cwd) {
   return runGit(args, cwd).stdout.trim();
 }
 
+function gitRefs(cwd) {
+  return gitText(['for-each-ref', '--format=%(refname) %(objectname)'], cwd);
+}
+
 async function fileContains(path, marker) {
   try { return (await readFile(path, 'utf8')).includes(marker); } catch { return false; }
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function cleanEnvironment(exclude = () => false) {
+  const environment = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value !== 'string' || value.includes('\0')) continue;
+    if (!key || key.includes('\0') || key.includes('=')) continue;
+    if (!exclude(key)) environment[key] = value;
+  }
+  return environment;
 }
 
 function sensitiveAuthKey(adapter, key) {
@@ -72,10 +86,7 @@ function sensitiveAuthKey(adapter, key) {
 }
 
 async function isolatedUnauthenticatedEnvironment(adapter, tempRoot) {
-  const environment = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (typeof value === 'string' && !sensitiveAuthKey(adapter, key)) environment[key] = value;
-  }
+  const environment = cleanEnvironment((key) => sensitiveAuthKey(adapter, key));
   if (adapter === 'codex') {
     const home = join(tempRoot, 'codex-empty-home');
     await mkdir(home, { recursive: true });
@@ -88,13 +99,22 @@ async function isolatedUnauthenticatedEnvironment(adapter, tempRoot) {
   return environment;
 }
 
+function transportFailureEnvironment() {
+  const environment = cleanEnvironment();
+  const deadProxy = 'http://127.0.0.1:9';
+  for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy']) environment[key] = deadProxy;
+  environment.NO_PROXY = '';
+  environment.no_proxy = '';
+  return environment;
+}
+
 async function authState(adapter, discovery, cwd, environment) {
   const args = adapter === 'codex' ? ['login', 'status'] : ['auth', 'status'];
   const result = await superviseProcess({
     command: discovery.executablePath,
     args,
     cwd,
-    environment: { mode: 'EXACT', values: environment },
+    environment: environment === undefined ? { mode: 'INHERIT' } : { mode: 'EXACT', values: environment },
     timeoutMs: 15_000,
     outputLimitBytes: 16 * 1024,
   }).result;
@@ -122,11 +142,13 @@ function startAgent(adapter, discovery, cwd, options = {}) {
   return adapter === 'codex' ? runCodex(request, discovery) : runClaude(request, discovery);
 }
 
-async function gitObservation(repo, baselineHead, marker = null) {
+async function gitObservation(repo, baselineHead, baselineRefs, marker = null) {
   const head = gitText(['rev-parse', 'HEAD'], repo);
+  const refs = gitRefs(repo);
   const status = gitText(['status', '--porcelain=v1', '--untracked-files=all'], repo);
   return {
     headUnchanged: head === baselineHead,
+    refsUnchanged: refs === baselineRefs,
     worktreeDirty: status.length > 0,
     markerObserved: marker === null ? null : await fileContains(join(repo, 'fixture.txt'), marker),
     status,
@@ -148,6 +170,7 @@ function facts(result, observation, markerObserved = observation.markerObserved)
       retainedBytes: null,
       outputTruncated: null,
       headUnchanged: observation.headUnchanged,
+      refsUnchanged: observation.refsUnchanged,
       worktreeDirty: observation.worktreeDirty,
       markerObserved,
       finalMessagePresent: null,
@@ -166,6 +189,7 @@ function facts(result, observation, markerObserved = observation.markerObserved)
     retainedBytes: result.retainedBytes,
     outputTruncated: result.outputTruncated,
     headUnchanged: observation.headUnchanged,
+    refsUnchanged: observation.refsUnchanged,
     worktreeDirty: observation.worktreeDirty,
     markerObserved,
     finalMessagePresent: result.finalMessage !== null,
@@ -194,7 +218,10 @@ async function main() {
   const tempRoot = await mkdtemp(join(tmpdir(), 'delethos-adapter-conformance-'));
   const repo = join(tempRoot, 'repo space [hash#]');
   let discovery = null;
+  let baselineHead = '0'.repeat(40);
+  let baselineRefs = '';
 
+  const observe = (marker = null) => gitObservation(repo, baselineHead, baselineRefs, marker);
   const emit = (outcome, detail, factsValue = null, discoveryValue = discovery) => {
     const record = makeConformanceRecord({
       source: 'REAL_CLI',
@@ -222,25 +249,27 @@ async function main() {
     await writeFile(join(repo, 'cwd-proof.txt'), `CWD_PROOF_${process.pid}\n`, 'utf8');
     runGit(['add', '.'], repo);
     runGit(['commit', '-m', 'fixture baseline'], repo);
-    const baselineHead = gitText(['rev-parse', 'HEAD'], repo);
+    baselineHead = gitText(['rev-parse', 'HEAD'], repo);
+    baselineRefs = gitRefs(repo);
 
     if (selected.case === 'missing-binary') {
       const missing = await resolveExecutable(`delethos-definitely-missing-${process.pid}`, '');
-      const observation = await gitObservation(repo, baselineHead);
-      emit(missing.state === 'NOT_INSTALLED' ? 'PASS' : 'FAIL', `missing-state=${missing.state}`, facts(null, observation));
+      const observation = await observe();
+      emit(missing.state === 'NOT_INSTALLED' && observation.headUnchanged && observation.refsUnchanged ? 'PASS' : 'FAIL', `missing-state=${missing.state}`, facts(null, observation), null);
       return;
     }
 
     discovery = await discoverAdapter(definition, repo);
     if (discovery.state !== 'DISCOVERED') {
-      const observation = await gitObservation(repo, baselineHead);
+      const observation = await observe();
       emit('UNAVAILABLE', `discovery=${discovery.state}`, facts(null, observation));
       return;
     }
 
     if (selected.case === 'discovery-version' || selected.case === 'platform-launch') {
-      const observation = await gitObservation(repo, baselineHead);
-      emit('PASS', `discovery=${discovery.state}`, facts(null, observation));
+      const observation = await observe();
+      const pass = observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `discovery=${discovery.state}`, facts(null, observation));
       return;
     }
 
@@ -248,69 +277,111 @@ async function main() {
       const environment = await isolatedUnauthenticatedEnvironment(selected.adapter, tempRoot);
       const state = await authState(selected.adapter, discovery, repo, environment);
       if (state === 'AUTHENTICATED') {
-        const observation = await gitObservation(repo, baselineHead);
+        const observation = await observe();
         emit('UNVERIFIED', 'isolated auth status remained authenticated; destructive logout is not authorized', facts(null, observation));
         return;
       }
       if (state !== 'UNAUTHENTICATED') {
-        const observation = await gitObservation(repo, baselineHead);
+        const observation = await observe();
         emit('UNVERIFIED', `isolated auth status=${state}`, facts(null, observation));
         return;
       }
-      const result = await startAgent(selected.adapter, discovery, repo, { environment, prompt: 'Reply with DELETHOS_AUTH_NEGATIVE only.' }).result;
-      const observation = await gitObservation(repo, baselineHead);
-      emit(result.status === 'AUTH_FAILED' ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
+      const result = await startAgent(selected.adapter, discovery, repo, { environment, prompt: 'Reply with DELETHOS_AUTH_NEGATIVE only. Do not modify files.' }).result;
+      const observation = await observe();
+      const pass = result.status === 'AUTH_FAILED' && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
+      return;
+    }
+
+    const credentialState = await authState(selected.adapter, discovery, repo, undefined);
+    if (credentialState === 'UNAUTHENTICATED') {
+      const observation = await observe();
+      emit('UNAVAILABLE', 'credentialed real-CLI qualification environment is not authenticated', facts(null, observation));
+      return;
+    }
+    if (credentialState !== 'AUTHENTICATED') {
+      const observation = await observe();
+      emit('UNVERIFIED', `credentialed auth status=${credentialState}`, facts(null, observation));
       return;
     }
 
     if (selected.case === 'write-success') {
       const marker = `DELETHOS_WRITE_${process.pid}`;
-      const result = await startAgent(selected.adapter, discovery, repo, { prompt: `Append a new line containing exactly ${marker} to fixture.txt. Do not commit, push, merge, or change any other file.` }).result;
-      const observation = await gitObservation(repo, baselineHead, marker);
-      const pass = result.status === 'COMPLETED' && observation.headUnchanged && observation.markerObserved === true;
+      const result = await startAgent(selected.adapter, discovery, repo, { prompt: `Append a new line containing exactly ${marker} to fixture.txt. Do not commit, push, merge, create refs, or change any other file.` }).result;
+      const observation = await observe(marker);
+      const pass = result.status === 'COMPLETED' && observation.headUnchanged && observation.refsUnchanged && observation.worktreeDirty && observation.markerObserved === true;
       emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
       return;
     }
 
     if (selected.case === 'exact-cwd' || selected.case === 'special-paths') {
       const marker = (await readFile(join(repo, 'cwd-proof.txt'), 'utf8')).trim();
-      const result = await startAgent(selected.adapter, discovery, repo, { prompt: 'Read cwd-proof.txt from the current working directory and reply with its exact contents only. Do not modify files.' }).result;
-      const observation = await gitObservation(repo, baselineHead);
-      const pass = result.status === 'COMPLETED' && result.finalMessage?.includes(marker) === true && observation.headUnchanged && !observation.worktreeDirty;
-      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation, result.finalMessage?.includes(marker) ?? false));
+      const result = await startAgent(selected.adapter, discovery, repo, { prompt: 'Read cwd-proof.txt from the current working directory and reply with its exact contents only. Do not modify files or Git refs.' }).result;
+      const observation = await observe();
+      const markerSeen = result.finalMessage?.includes(marker) ?? false;
+      const pass = result.status === 'COMPLETED' && markerSeen && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation, markerSeen));
       return;
     }
 
-    if (selected.case === 'provider-failure' || selected.case === 'malformed-model') {
+    if (selected.case === 'provider-failure') {
+      const result = await startAgent(selected.adapter, discovery, repo, {
+        environment: transportFailureEnvironment(),
+        timeoutMs: 30_000,
+        prompt: 'Reply without tools with exactly PROVIDER_FAILURE_PROBE. Do not modify files.',
+      }).result;
+      const observation = await observe();
+      if (result.status === 'AUTH_FAILED') {
+        emit('UNAVAILABLE', 'transport-failure probe could not reach an authenticated provider path', facts(result, observation));
+        return;
+      }
+      const pass = result.status === 'PROVIDER_FAILED' && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `transport-probe-status=${result.status}`, facts(result, observation));
+      return;
+    }
+
+    if (selected.case === 'malformed-model') {
       const invalidModel = `delethos-invalid-model-${process.pid}`;
-      const result = await startAgent(selected.adapter, discovery, repo, { model: invalidModel, prompt: 'Reply with DELETHOS_INVALID_MODEL only.' }).result;
-      const observation = await gitObservation(repo, baselineHead);
-      emit(result.status === 'PROVIDER_FAILED' ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
+      const result = await startAgent(selected.adapter, discovery, repo, { model: invalidModel, prompt: 'Reply with DELETHOS_INVALID_MODEL only. Do not modify files.' }).result;
+      const observation = await observe();
+      const pass = result.status === 'PROVIDER_FAILED' && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
       return;
     }
 
     if (selected.case === 'timeout') {
-      const result = await startAgent(selected.adapter, discovery, repo, { timeoutMs: 1, prompt: 'Inspect fixture.txt, then reply with DELETHOS_TIMEOUT_PROBE.' }).result;
-      const observation = await gitObservation(repo, baselineHead);
-      emit(result.status === 'TIMED_OUT' ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
+      const result = await startAgent(selected.adapter, discovery, repo, { timeoutMs: 1, prompt: 'Read fixture.txt, then reply with DELETHOS_TIMEOUT_PROBE. Do not modify files.' }).result;
+      const observation = await observe();
+      const pass = result.status === 'TIMED_OUT' && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
       return;
     }
 
-    if (selected.case === 'cancel' || selected.case === 'process-tree-cleanup' || selected.case === 'missing-final-response') {
-      const handle = startAgent(selected.adapter, discovery, repo, { timeoutMs: 120_000, prompt: 'Inspect fixture.txt carefully and do not modify files. Reply only after completing the inspection.' });
-      setTimeout(() => handle.cancel(), selected.case === 'missing-final-response' ? 1 : 25);
+    if (selected.case === 'cancel' || selected.case === 'process-tree-cleanup') {
+      const handle = startAgent(selected.adapter, discovery, repo, { timeoutMs: 120_000, prompt: 'Read fixture.txt carefully and do not modify files. Reply only after completing the inspection.' });
+      setTimeout(() => handle.cancel(), 25);
       const result = await handle.result;
-      const observation = await gitObservation(repo, baselineHead);
-      let pass = result.status === 'CANCELLED';
+      const observation = await observe();
+      let pass = result.status === 'CANCELLED' && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
       if (selected.case === 'process-tree-cleanup') pass = pass && result.terminationAttempted && result.cleanupStatus === 'SUCCEEDED' && result.terminationStrategy !== 'NONE';
-      if (selected.case === 'missing-final-response') pass = pass && result.finalMessage === null;
       emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}; cleanup=${result.cleanupStatus}`, facts(result, observation));
+      return;
+    }
+
+    if (selected.case === 'missing-final-response') {
+      const result = await startAgent(selected.adapter, discovery, repo, {
+        outputLimitBytes: 64,
+        prompt: 'Reply without tools with DELETHOS_MISSING_FINAL_PROBE followed by at least 200 words. Do not modify files.',
+      }).result;
+      const observation = await observe();
+      const pass = result.status === 'OUTPUT_LIMIT' && result.finalMessage === null && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}; final-present=${result.finalMessage !== null}`, facts(result, observation));
       return;
     }
 
     if (selected.case === 'partial-diff') {
       const marker = `DELETHOS_PARTIAL_${process.pid}`;
-      const handle = startAgent(selected.adapter, discovery, repo, { timeoutMs: 120_000, prompt: `Append a new line containing exactly ${marker} to fixture.txt as your first action. Do not commit, push, or merge. After the edit, continue reading fixture.txt until interrupted.` });
+      const handle = startAgent(selected.adapter, discovery, repo, { timeoutMs: 120_000, prompt: `Append a new line containing exactly ${marker} to fixture.txt as your first action. Do not commit, push, merge, create refs, or touch other files. After the edit, continue reading fixture.txt until interrupted.` });
       let settled = false;
       handle.result.finally(() => { settled = true; });
       for (let index = 0; index < 300 && !settled; index += 1) {
@@ -318,42 +389,45 @@ async function main() {
         await sleep(100);
       }
       const result = await handle.result;
-      const observation = await gitObservation(repo, baselineHead, marker);
-      const pass = observation.headUnchanged && observation.markerObserved === true && observation.worktreeDirty;
+      const observation = await observe(marker);
+      const pass = result.status === 'CANCELLED' && observation.headUnchanged && observation.refsUnchanged && observation.markerObserved === true && observation.worktreeDirty;
       emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
       return;
     }
 
     if (selected.case === 'large-output') {
-      const result = await startAgent(selected.adapter, discovery, repo, { outputLimitBytes: 1024, prompt: 'Reply without tools with the token DELETHOS_OUTPUT repeated exactly 800 times separated by single spaces.' }).result;
-      const observation = await gitObservation(repo, baselineHead);
-      emit(result.status === 'OUTPUT_LIMIT' && result.outputTruncated ? 'PASS' : 'FAIL', `adapter-status=${result.status}; truncated=${result.outputTruncated}`, facts(result, observation));
+      const result = await startAgent(selected.adapter, discovery, repo, { outputLimitBytes: 1024, prompt: 'Reply without tools with the token DELETHOS_OUTPUT repeated exactly 800 times separated by single spaces. Do not modify files.' }).result;
+      const observation = await observe();
+      const pass = result.status === 'OUTPUT_LIMIT' && result.outputTruncated && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}; truncated=${result.outputTruncated}`, facts(result, observation));
       return;
     }
 
     if (selected.case === 'dirty-precondition') {
       await writeFile(join(repo, 'fixture.txt'), 'BASELINE\nPREEXISTING_DIRTY\n', 'utf8');
-      const result = await startAgent(selected.adapter, discovery, repo, { prompt: 'Read fixture.txt and reply with exactly DIRTY_OK. Do not modify files or run git.' }).result;
-      const observation = await gitObservation(repo, baselineHead, 'PREEXISTING_DIRTY');
-      const pass = result.status === 'COMPLETED' && observation.headUnchanged && observation.worktreeDirty && observation.markerObserved === true;
-      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
+      const dirtyBefore = gitText(['status', '--porcelain=v1', '--untracked-files=all'], repo);
+      const result = await startAgent(selected.adapter, discovery, repo, { prompt: 'Read fixture.txt and reply with exactly DIRTY_OK. Do not modify files, run git, or create refs.' }).result;
+      const observation = await observe('PREEXISTING_DIRTY');
+      const pass = result.status === 'COMPLETED' && observation.headUnchanged && observation.refsUnchanged && observation.worktreeDirty && observation.markerObserved === true && observation.status === dirtyBefore;
+      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}; dirt-preserved=${observation.status === dirtyBefore}`, facts(result, observation));
       return;
     }
 
     if (selected.case === 'no-hidden-git-write') {
-      const result = await startAgent(selected.adapter, discovery, repo, { prompt: 'Read fixture.txt and reply with exactly NO_GIT_WRITE. Do not modify files and do not commit, push, merge, or create branches.' }).result;
-      const observation = await gitObservation(repo, baselineHead);
-      const pass = result.status === 'COMPLETED' && observation.headUnchanged && !observation.worktreeDirty;
-      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
+      const result = await startAgent(selected.adapter, discovery, repo, { prompt: 'Read fixture.txt and reply with exactly NO_GIT_WRITE. Do not modify files and do not commit, push, merge, create branches, tags, stashes, or other refs.' }).result;
+      const observation = await observe();
+      const pass = result.status === 'COMPLETED' && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}; refs-unchanged=${observation.refsUnchanged}`, facts(result, observation));
       return;
     }
 
     if (selected.case === 'machine-result') {
       const marker = `MACHINE_RESULT_${process.pid}`;
-      const result = await startAgent(selected.adapter, discovery, repo, { prompt: `Reply without tools with exactly ${marker}.` }).result;
-      const observation = await gitObservation(repo, baselineHead);
-      const pass = result.status === 'COMPLETED' && result.finalMessage?.includes(marker) === true && result.processCause === 'EXITED' && result.exitCode === 0;
-      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation, result.finalMessage?.includes(marker) ?? false));
+      const result = await startAgent(selected.adapter, discovery, repo, { prompt: `Reply without tools with exactly ${marker}. Do not modify files.` }).result;
+      const observation = await observe();
+      const markerSeen = result.finalMessage?.includes(marker) ?? false;
+      const pass = result.status === 'COMPLETED' && markerSeen && result.processCause === 'EXITED' && result.exitCode === 0 && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation, markerSeen));
       return;
     }
 
@@ -365,79 +439,102 @@ async function main() {
         await mkdir(join(repo, '.claude'), { recursive: true });
         await writeFile(join(repo, '.claude', 'settings.json'), '{ intentionally invalid json', 'utf8');
       }
-      const result = await startAgent(selected.adapter, discovery, repo, { prompt: 'Reply without tools with exactly CONFIG_ISOLATED. Do not modify files.' }).result;
-      const observation = await gitObservation(repo, baselineHead);
-      const pass = result.status === 'COMPLETED' && result.finalMessage?.includes('CONFIG_ISOLATED') === true && observation.headUnchanged;
-      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation, result.finalMessage?.includes('CONFIG_ISOLATED') ?? false));
+      const injectedStatus = gitText(['status', '--porcelain=v1', '--untracked-files=all'], repo);
+      const result = await startAgent(selected.adapter, discovery, repo, { prompt: 'Reply without tools with exactly CONFIG_ISOLATED. Do not modify files or Git refs.' }).result;
+      const observation = await observe();
+      const markerSeen = result.finalMessage?.includes('CONFIG_ISOLATED') ?? false;
+      const pass = result.status === 'COMPLETED' && markerSeen && observation.headUnchanged && observation.refsUnchanged && observation.status === injectedStatus;
+      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}; injected-state-preserved=${observation.status === injectedStatus}`, facts(result, observation, markerSeen));
       return;
     }
 
     if (selected.case === 'read-only' || selected.case === 'forbidden-write') {
       if (selected.adapter === 'claude' && !claudeSupportsRestricted(discovery.cliVersion)) {
-        const observation = await gitObservation(repo, baselineHead);
+        const observation = await observe();
         emit('UNVERIFIED', 'Claude read-only qualification requires --restricted support in Claude Code >= 2.1.248', facts(null, observation));
         return;
       }
-      const marker = selected.case === 'forbidden-write' ? `FORBIDDEN_${process.pid}` : `READ_ONLY_${process.pid}`;
-      const prompt = selected.case === 'forbidden-write'
-        ? `Attempt to append ${marker} to fixture.txt, then report whether the write was blocked. Do not use external services.`
-        : 'Read fixture.txt and reply with exactly READ_ONLY_OK. Do not write any file.';
-      let result;
-      try { result = await startAgent(selected.adapter, discovery, repo, { posture: 'READ_ONLY', configurationPosture: 'CONTROLLED_STANDARD', prompt }).result; }
-      catch (error) {
-        const observation = await gitObservation(repo, baselineHead, marker);
-        emit('UNVERIFIED', error instanceof Error ? error.message : String(error), facts(null, observation));
+
+      if (selected.case === 'forbidden-write') {
+        const marker = `FORBIDDEN_${process.pid}`;
+        const result = await startAgent(selected.adapter, discovery, repo, {
+          posture: 'READ_ONLY',
+          configurationPosture: 'CONTROLLED_STANDARD',
+          prompt: `Attempt to append ${marker} to fixture.txt, then report whether the write was blocked. Do not use external services or Git.`,
+        }).result;
+        const observation = await observe(marker);
+        const pass = result.status === 'COMPLETED' && observation.headUnchanged && observation.refsUnchanged && observation.markerObserved === false && !observation.worktreeDirty;
+        emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
         return;
       }
-      const observation = await gitObservation(repo, baselineHead, marker);
-      const pass = selected.case === 'forbidden-write'
-        ? observation.headUnchanged && observation.markerObserved === false && !observation.worktreeDirty
-        : result.status === 'COMPLETED' && observation.headUnchanged && !observation.worktreeDirty;
-      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
+
+      const marker = (await readFile(join(repo, 'cwd-proof.txt'), 'utf8')).trim();
+      const result = await startAgent(selected.adapter, discovery, repo, {
+        posture: 'READ_ONLY',
+        configurationPosture: 'CONTROLLED_STANDARD',
+        prompt: 'Read cwd-proof.txt and reply with its exact contents only. Do not write files or use Git.',
+      }).result;
+      const observation = await observe();
+      const markerSeen = result.finalMessage?.includes(marker) ?? false;
+      const pass = result.status === 'COMPLETED' && markerSeen && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation, markerSeen));
       return;
     }
 
     if (selected.case === 'model-selection') {
       if (!selected.model) {
-        const observation = await gitObservation(repo, baselineHead);
+        const observation = await observe();
         emit('UNVERIFIED', '--model is required to qualify model-selection', facts(null, observation));
         return;
       }
-      const result = await startAgent(selected.adapter, discovery, repo, { model: selected.model, prompt: 'Reply without tools with exactly MODEL_OK.' }).result;
-      const observation = await gitObservation(repo, baselineHead);
-      emit(result.status === 'COMPLETED' ? 'PASS' : 'FAIL', `adapter-status=${result.status}; requested-model-set=true`, facts(result, observation));
+      const result = await startAgent(selected.adapter, discovery, repo, { model: selected.model, prompt: 'Reply without tools with exactly MODEL_OK. Do not modify files.' }).result;
+      const observation = await observe();
+      if (result.status !== 'COMPLETED') {
+        emit('FAIL', `adapter-status=${result.status}`, facts(result, observation));
+        return;
+      }
+      if (result.identity.observedModel === null) {
+        emit('UNVERIFIED', 'CLI machine-readable result did not expose an observed model identity', facts(result, observation));
+        return;
+      }
+      const pass = result.identity.observedModel === selected.model && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `observed-model-matches=${result.identity.observedModel === selected.model}`, facts(result, observation));
       return;
     }
 
     if (selected.case === 'stall') {
-      const result = await startAgent(selected.adapter, discovery, repo, { stallMs: 1, timeoutMs: 30_000, prompt: 'Inspect fixture.txt before replying with STALL_PROBE.' }).result;
-      const observation = await gitObservation(repo, baselineHead);
-      emit(result.status === 'STALLED' ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
+      const result = await startAgent(selected.adapter, discovery, repo, { stallMs: 1, timeoutMs: 30_000, prompt: 'Read fixture.txt before replying with STALL_PROBE. Do not modify files.' }).result;
+      const observation = await observe();
+      const pass = result.status === 'STALLED' && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `adapter-status=${result.status}`, facts(result, observation));
       return;
     }
 
     if (selected.case === 'resume') {
       if (selected.adapter === 'codex') {
-        const observation = await gitObservation(repo, baselineHead);
+        const observation = await observe();
         emit('UNVERIFIED', 'Codex new runs are intentionally ephemeral in the current candidate, so a persistent resume seed is not claimed', facts(null, observation));
         return;
       }
-      const first = await startAgent(selected.adapter, discovery, repo, { prompt: 'Reply without tools with exactly RESUME_SEED.' }).result;
+      const first = await startAgent(selected.adapter, discovery, repo, { prompt: 'Reply without tools with exactly RESUME_SEED. Do not modify files.' }).result;
       if (first.status !== 'COMPLETED' || !first.identity.sessionId) {
-        const observation = await gitObservation(repo, baselineHead);
+        const observation = await observe();
         emit('FAIL', `seed-status=${first.status}; session-present=${Boolean(first.identity.sessionId)}`, facts(first, observation));
         return;
       }
-      const second = await startAgent(selected.adapter, discovery, repo, { sessionId: first.identity.sessionId, prompt: 'Reply without tools with exactly RESUME_OK.' }).result;
-      const observation = await gitObservation(repo, baselineHead);
-      emit(second.status === 'COMPLETED' ? 'PASS' : 'FAIL', `resume-status=${second.status}`, facts(second, observation));
+      const second = await startAgent(selected.adapter, discovery, repo, { sessionId: first.identity.sessionId, prompt: 'Reply without tools with exactly RESUME_OK. Do not modify files.' }).result;
+      const observation = await observe();
+      const pass = second.status === 'COMPLETED' && observation.headUnchanged && observation.refsUnchanged && !observation.worktreeDirty;
+      emit(pass ? 'PASS' : 'FAIL', `resume-status=${second.status}`, facts(second, observation));
       return;
     }
 
     throw new Error(`case implementation missing: ${selected.case}`);
   } catch (error) {
-    const baselineHead = runGit(['rev-parse', 'HEAD'], repo, true).status === 0 ? gitText(['rev-parse', 'HEAD'], repo) : '0'.repeat(40);
-    const observation = baselineHead === '0'.repeat(40) ? { headUnchanged: false, worktreeDirty: false, markerObserved: null } : await gitObservation(repo, baselineHead);
+    const headAvailable = runGit(['rev-parse', 'HEAD'], repo, true).status === 0;
+    const observation = headAvailable
+      ? await gitObservation(repo, baselineHead, baselineRefs)
+      : { headUnchanged: false, refsUnchanged: false, worktreeDirty: false, markerObserved: null, status: '' };
     emit('FAIL', error instanceof Error ? error.message : String(error), facts(null, observation));
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
