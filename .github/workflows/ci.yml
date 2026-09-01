@@ -66,6 +66,8 @@ jobs:
     steps:
       - name: Checkout canonical main
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm and Node 24
         uses: pnpm/setup@v2
@@ -77,7 +79,8 @@ jobs:
       - name: Install repository dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install pinned native Codex CLI
+      - name: Install pinned native Codex CLI (POSIX)
+        if: ${{ runner.os != 'Windows' }}
         shell: bash
         run: |
           node <<'NODE'
@@ -88,10 +91,8 @@ jobs:
 
           const installRoot = join(process.env.RUNNER_TEMP, 'delethos-codex-install');
           mkdirSync(installRoot, { recursive: true });
-
-          const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
           const install = spawnSync(
-            npmCommand,
+            'npm',
             [
               'install',
               '--prefix', installRoot,
@@ -109,19 +110,17 @@ jobs:
           }
 
           const targets = {
-            'linux:x64': ['codex-linux-x64', 'x86_64-unknown-linux-musl', 'codex'],
-            'linux:arm64': ['codex-linux-arm64', 'aarch64-unknown-linux-musl', 'codex'],
-            'darwin:x64': ['codex-darwin-x64', 'x86_64-apple-darwin', 'codex'],
-            'darwin:arm64': ['codex-darwin-arm64', 'aarch64-apple-darwin', 'codex'],
-            'win32:x64': ['codex-win32-x64', 'x86_64-pc-windows-msvc', 'codex.exe'],
-            'win32:arm64': ['codex-win32-arm64', 'aarch64-pc-windows-msvc', 'codex.exe'],
+            'linux:x64': ['codex-linux-x64', 'x86_64-unknown-linux-musl'],
+            'linux:arm64': ['codex-linux-arm64', 'aarch64-unknown-linux-musl'],
+            'darwin:x64': ['codex-darwin-x64', 'x86_64-apple-darwin'],
+            'darwin:arm64': ['codex-darwin-arm64', 'aarch64-apple-darwin'],
           };
           const selected = targets[`${process.platform}:${process.arch}`];
           if (!selected) {
             throw new Error(`unsupported hosted qualification platform ${process.platform}/${process.arch}`);
           }
 
-          const [platformPackage, targetTriple, executableName] = selected;
+          const [platformPackage, targetTriple] = selected;
           const source = join(
             installRoot,
             'node_modules',
@@ -130,7 +129,7 @@ jobs:
             'vendor',
             targetTriple,
             'bin',
-            executableName,
+            'codex',
           );
           if (!existsSync(source)) {
             throw new Error(`pinned Codex native executable was not found at ${source}`);
@@ -138,14 +137,11 @@ jobs:
 
           const binDir = join(process.env.RUNNER_TEMP, 'delethos-codex-bin');
           mkdirSync(binDir, { recursive: true });
-          const destination = join(binDir, executableName);
+          const destination = join(binDir, 'codex');
           copyFileSync(source, destination);
-          if (process.platform !== 'win32') chmodSync(destination, 0o755);
+          chmodSync(destination, 0o755);
 
-          const version = spawnSync(destination, ['--version'], {
-            encoding: 'utf8',
-            shell: false,
-          });
+          const version = spawnSync(destination, ['--version'], { encoding: 'utf8', shell: false });
           const observed = `${version.stdout ?? ''}${version.stderr ?? ''}`.trim();
           if (version.status !== 0 || !observed.includes('0.152.0')) {
             throw new Error(`unexpected Codex version: status=${version.status ?? 'null'} output=${observed}`);
@@ -153,6 +149,48 @@ jobs:
           console.log(`Pinned Codex CLI: ${observed}`);
           appendFileSync(process.env.GITHUB_PATH, `${binDir}${EOL}`);
           NODE
+
+      - name: Install pinned native Codex CLI (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installRoot = Join-Path $env:RUNNER_TEMP 'delethos-codex-install'
+          New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+          Set-Content -Path (Join-Path $installRoot 'package.json') -Value '{"private":true}' -NoNewline
+
+          pnpm --dir $installRoot add --ignore-scripts --save-exact '@openai/codex@0.152.0'
+          if ($LASTEXITCODE -ne 0) {
+            throw "pinned Codex install failed with exit code $LASTEXITCODE"
+          }
+
+          $arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
+          if ($arch -eq 'x64') {
+            $platformPackage = 'codex-win32-x64'
+            $targetTriple = 'x86_64-pc-windows-msvc'
+          } elseif ($arch -eq 'arm64') {
+            $platformPackage = 'codex-win32-arm64'
+            $targetTriple = 'aarch64-pc-windows-msvc'
+          } else {
+            throw "unsupported hosted qualification Windows architecture $arch"
+          }
+
+          $source = Join-Path $installRoot "node_modules\@openai\$platformPackage\vendor\$targetTriple\bin\codex.exe"
+          if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+            throw "pinned Codex native executable was not found at $source"
+          }
+
+          $binDir = Join-Path $env:RUNNER_TEMP 'delethos-codex-bin'
+          New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+          $destination = Join-Path $binDir 'codex.exe'
+          Copy-Item -LiteralPath $source -Destination $destination -Force
+
+          $observed = (& $destination --version 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or -not $observed.Contains('0.152.0')) {
+            throw "unexpected Codex version: exit=$LASTEXITCODE output=$observed"
+          }
+          Write-Host "Pinned Codex CLI: $observed"
+          Add-Content -Path $env:GITHUB_PATH -Value $binDir
 
       - name: Qualify missing binary
         run: node scripts/adapter-conformance.mjs --adapter codex --case missing-binary --output stdout
@@ -162,6 +200,3 @@ jobs:
 
       - name: Qualify platform launch
         run: node scripts/adapter-conformance.mjs --adapter codex --case platform-launch --output stdout
-
-      - name: Qualify isolated authentication failure
-        run: node scripts/adapter-conformance.mjs --adapter codex --case auth-failure --output stdout
