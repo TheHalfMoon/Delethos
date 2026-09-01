@@ -2,54 +2,34 @@
 
 **Repository:** `TheHalfMoon/Delethos`  
 **Canonical branch:** `main`  
-**Founding activation merge:** `7e44ab45be0b89af7d4fb6cb2ee2f13e6e69839b`  
-**Founding activation tree:** `5055f2b7b0e859e63443d3fc27183c4335ee9541`  
-**State represented by this file when canonical:** `POST_000_SHAPING` iff the terminal closeout effectivity conditions are realized; otherwise `SPEC_000_FOUNDING_GOVERNANCE_ACTIVE`  
-**Product runtime implementation:** not authorized by Specification 000
+**Specification 000 terminal closeout merge:** `6fdb0d5d007f7d87b97b4016677eea9480ba3521`  
+**Specification 000 disposition:** `CLOSED_CANONICAL` after exact terminal closeout merge, canonical re-read, and no configured failing required post-merge status  
+**State represented by this file when canonical:** `SPEC_001_ACTIVE`  
+**Active product specification when canonical:** `specs/001-core-run-policy-evidence/spec.md`
 
 Live GitHub/repository truth overrides this file.
 
-## Effectivity rule
+## Specification 000 closure
 
-This file is authoritative only when read from canonical `main` at the current canonical revision.
-
-Specification 000 is `CLOSED_CANONICAL` only if the terminal conditions in `specs/000-founding-governance/closeout.md` are all machine-observed. In particular, the exact closeout candidate must merge after exact-head reconciliation and canonical `main` must be re-read afterward.
-
-If those conditions are not yet satisfied, Specification 000 remains active and only its bounded closeout work is authorized.
-
-## Canonical founding activation
-
-PR #1 activated the founding authority chain:
+Specification 000's terminal effectivity conditions were machine-observed:
 
 ```text
-bootstrap_base = 3fab6947ab4b29ded821ec75e775119c270c7eac
-qualified_pr_head = 2d5903fe608e86f1a9e8f222d38527179d0b4b3e
-activation_pr = 1
-activation_merge = 7e44ab45be0b89af7d4fb6cb2ee2f13e6e69839b
-activation_tree = 5055f2b7b0e859e63443d3fc27183c4335ee9541
-activation_changed_paths = 22
+closeout_base = 7e44ab45be0b89af7d4fb6cb2ee2f13e6e69839b
+closeout_head = b8b14dc52c6ac5f1f05636759b4c995ff4b6dd49
+closeout_pr = 2
+closeout_merge = 6fdb0d5d007f7d87b97b4016677eea9480ba3521
+closeout_tree = 9f9072fb1e1a5392abad01a45973ef2568705aea
 ```
 
-The activation merge is GitHub-signature-verified. Its exact bootstrap-to-canonical diff contains only the authorized founding documentation/governance surface and no runtime product implementation.
+PR #2 merged by exact expected head. Canonical `main` was re-read afterward and resolved to the closeout merge. The merge is GitHub-signature-verified. No required post-merge commit status was configured or failing. No recursive closeout PR is authorized merely to record the realized condition.
 
-## Founding closeout truth
+Specification 000 is therefore `CLOSED_CANONICAL`.
 
-The canonical activation evidence establishes:
+## Specification 001 activation effectivity
 
-- constitution, canonical reading order, architecture, security model, evidence model, adapter contract, founding ADRs/research, roadmap, adoption strategy, contribution/security/license/PR surfaces exist;
-- the 22-path founding activation is within Specification 000 authority;
-- no product source/package/dependency/release/benchmark/adapter implementation entered through activation;
-- PR #1 had 0 submitted reviews and 0 inline review threads;
-- Qodo was billing-blocked, CodeRabbit did not submit an approving review, and Cubic was summary-only; none was treated as PASS;
-- no repository CI was configured for activation and the canonical activation merge has no commit statuses;
-- `main` is currently unprotected and no ruleset exists;
-- repository description/homepage/topics are currently unset/empty.
+This file activates Specification 001 only if this exact shaping authority chain itself becomes canonical after exact-head qualification and canonical re-read.
 
-The administrative gaps are recorded as residual follow-up, not fabricated as complete.
-
-## Post-000 transition
-
-When Specification 000's terminal effectivity conditions are realized:
+Before this shaping unit is canonical:
 
 ```text
 PROGRAM_STATUS = POST_000_SHAPING
@@ -58,22 +38,79 @@ PRODUCT_IMPLEMENTATION_AUTHORITY = NONE
 NEXT_ALLOWED_WORK = BOUNDED_SPEC_001_SHAPING_ONLY
 ```
 
-Specification 001 may then be shaped from canonical founding contracts plus fresh implementation research. Runtime implementation begins only if a later canonical Specification 001 activation explicitly authorizes it.
+Once this shaping unit is canonical and re-read successfully:
 
-## Explicit non-authority after Specification 000
+```text
+PROGRAM_STATUS = SPEC_001_ACTIVE
+ACTIVE_PRODUCT_SPEC = specs/001-core-run-policy-evidence/spec.md
+PRODUCT_IMPLEMENTATION_AUTHORITY = SPEC_001_BOUNDED_CORE_ONLY
+NEXT_ALLOWED_WORK = SPEC_001_TASK_ORDER
+```
 
-The following remain unauthorized until a later active product specification says otherwise:
+## Specification 001 authorized product boundary
 
-- product runtime source/scaffolding;
-- any named coding-agent adapter;
-- automatic routing;
-- automatic commit/merge/release;
-- cloud/hosted scope;
-- stable `delethos.*.v1` claims;
-- public benchmark/superiority claims;
-- TUI/Agent Skill/GitHub integration implementation;
-- repository-administration claims not reflected by live GitHub state.
+When active, Specification 001 authorizes only the deterministic pure-core implementation described by its spec/plan:
+
+- canonical JSON-compatible value validation/serialization;
+- SHA-256 canonical digests;
+- bounded task snapshot validation/digest;
+- bounded policy validation/compilation/digest;
+- explicit run lifecycle and transition table;
+- run logical revision;
+- verification-fact binding;
+- independent-review identity/result semantics;
+- deterministic `VERIFIED` eligibility;
+- minimal Node 24/TypeScript/pnpm workspace required to typecheck/test that core;
+- first repository CI limited to cross-platform typecheck/test/runtime-dependency validation.
+
+## Authorized product paths
+
+After shaping activation, implementation is limited to the path surface explicitly listed in `specs/001-core-run-policy-evidence/plan.md`, including:
+
+```text
+package.json
+pnpm-workspace.yaml
+pnpm-lock.yaml
+tsconfig.json
+.gitignore                         # only if justified
+.github/workflows/ci.yml
+packages/core/package.json
+packages/core/src/*.ts             # only the explicitly named Specification 001 source files
+packages/core/test/*.test.ts       # only the explicitly named Specification 001 tests
+specs/001-core-run-policy-evidence/**
+specs/CURRENT.md                   # controlled frontier/evidence updates
+```
+
+Any path outside the exact plan requires a canonical Specification 001 plan amendment before edit.
+
+## Explicit non-authority
+
+Specification 001 does not authorize:
+
+- filesystem/Git/worktree implementation;
+- subprocess/process-supervision implementation;
+- runtime timeout/stall measurement;
+- coding-agent discovery/adapters/provider SDKs;
+- actual independent reviewer invocation or repair loops;
+- general command/CI guard execution as product behavior;
+- CLI/TUI product commands;
+- adaptive routing, memory, benchmarking, quotas, or cost logic;
+- cloud/hosted scope or telemetry;
+- automatic commit/merge/release authority;
+- public package/release publication;
+- stable `delethos.*.v1` external-standard claims;
+- repository administration claims not reflected by live GitHub state.
+
+## Current live administrative gaps
+
+At the Specification 001 shaping base:
+
+- canonical `main` is not branch-protected;
+- no repository ruleset exists;
+- repository description/homepage/topics remain unset/empty.
+
+The current authenticated write surface does not expose supported mutation actions for those settings. They remain explicit external administrative follow-up and are not silently represented as completed.
 
 ## Continuation
 
-Complete the exact terminal closeout gate. After successful expected-head merge and canonical re-read, shape Specification 001 as a bounded deterministic core-state unit. Do not start runtime implementation from the roadmap or this transition record alone.
+Qualify and merge the exact Specification 001 shaping candidate. Re-read canonical `main`. Only after activation is machine-observed may a separate product implementation branch create the bounded Node/TypeScript core and CI surface. Product completion requires exact-head cross-platform CI, expected-head merge, canonical post-merge CI, and terminal evidence reconciliation.
