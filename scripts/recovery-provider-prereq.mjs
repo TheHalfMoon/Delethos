@@ -479,7 +479,7 @@ async function selfTest() {
     const envRoot = join(temp, 'pi');
     mkdirSync(envRoot, { recursive: false });
     const env = piEnvironment(envRoot);
-    const fakeExecutable = join(temp, process.platform === 'win32' ? 'pi.exe' : 'pi');
+    const fakeExecutable = join(temp, process.platform === 'win32' ? 'pi-fixture.exe' : 'pi-fixture');
     writeFileSync(fakeExecutable, '', { flag: 'wx' });
     const plan = buildPiConformanceInvocation({
       adapterId: 'pi-coding-agent',
