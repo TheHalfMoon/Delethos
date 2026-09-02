@@ -78,6 +78,11 @@ test('public candidate dispatch rejects unverified capabilities before launch', 
   assert.throws(() => buildOpenCodeInvocation(baseRequest({ adapterId: 'opencode' }), openCodeDiscovery), /capability is UNVERIFIED/);
 });
 
+test('public adapter SDK keeps conformance-only builders internal', () => {
+  assert.equal('buildPiConformanceInvocation' in adapters, false);
+  assert.equal('buildOpenCodeConformanceInvocation' in adapters, false);
+});
+
 test('public adapter SDK exports no commit, push, merge, or release authority', () => {
   const forbidden = Object.keys(adapters).filter((name) => /(?:commit|push|merge|release)/i.test(name));
   assert.deepEqual(forbidden, []);
