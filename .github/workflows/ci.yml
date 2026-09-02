@@ -262,3 +262,390 @@ jobs:
 
       - name: Observe Claude candidate missing-executable path
         run: node scripts/adapter-conformance.mjs --adapter claude --case missing-binary --output stdout
+
+  gold-recovery-probe:
+    name: gold recovery probe / ${{ matrix.os }}
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[gold-recovery-probe]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout canonical main
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm and Node 24
+        uses: pnpm/setup@v2
+        with:
+          version: 11.22.0
+          runtime: node@24
+          install: false
+
+      - name: Install repository dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Observe provider-free recovery CLI surfaces
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { createHash } = require('node:crypto');
+          const {
+            chmodSync,
+            existsSync,
+            mkdirSync,
+            mkdtempSync,
+            readdirSync,
+            statSync,
+            writeFileSync,
+          } = require('node:fs');
+          const { tmpdir } = require('node:os');
+          const { basename, join, resolve } = require('node:path');
+          const { spawnSync } = require('node:child_process');
+
+          const workspace = resolve(process.env.GITHUB_WORKSPACE || process.cwd());
+          const probeRoot = mkdtempSync(join(resolve(process.env.RUNNER_TEMP || tmpdir()), 'delethos-gold-recovery-'));
+          const target = `${process.platform}:${process.arch}`;
+
+          const targets = {
+            'linux:x64': {
+              platform: 'linux',
+              arch: 'x64',
+              copilot: {
+                asset: 'copilot-linux-x64.tar.gz',
+                sha256: '37fa67686a9e4ed8d46dcd6a9c80ab524dea840ecaa0a3f7edf8d09f961b97a9',
+              },
+              pi: {
+                asset: 'pi-linux-x64.tar.gz',
+                sha256: 'c2f3c3e6a1850bd87654cc3ca8811013272397c3d042a4e2a64c43ee1b423972',
+              },
+            },
+            'darwin:arm64': {
+              platform: 'macos',
+              arch: 'arm64',
+              copilot: {
+                asset: 'copilot-darwin-arm64.tar.gz',
+                sha256: 'c03bfc58c4402ec31d09ca11c379e1c17e95c3441f48009d721bf556fcc2c42e',
+              },
+              pi: {
+                asset: 'pi-darwin-arm64.tar.gz',
+                sha256: 'c68e3ac4d05b4e282aaab2e6c76f161d3e9e68f19a22e38913cbfaadb6c800f0',
+              },
+            },
+            'win32:x64': {
+              platform: 'windows',
+              arch: 'x64',
+              copilot: {
+                asset: 'copilot-win32-x64.zip',
+                sha256: 'dec18634ab7cc62a8c6829b1a25e6dd84a22e941a9b9f75ef88e3ec2a718b78f',
+              },
+              pi: {
+                asset: 'pi-windows-x64.zip',
+                sha256: '03b2318774f18721e959d9f8f3340a9f942e7aa516fb7030d3007a12a40a4a97',
+              },
+            },
+          };
+
+          const selected = targets[target];
+          if (!selected) {
+            throw new Error(`unsupported hosted recovery platform ${target}`);
+          }
+
+          function git(args) {
+            const result = spawnSync('git', args, {
+              cwd: workspace,
+              encoding: 'utf8',
+              shell: false,
+              timeout: 10_000,
+            });
+            if (result.status !== 0) throw new Error(`git ${args[0]} failed`);
+            return result.stdout.replace(/\r\n/g, '\n').trimEnd();
+          }
+
+          function snapshotRepository() {
+            return {
+              head: git(['rev-parse', 'HEAD']),
+              refs: git(['for-each-ref', '--format=%(refname) %(objectname)']),
+              status: git(['status', '--porcelain=v1', '--untracked-files=all']),
+            };
+          }
+
+          function repositoryChanged(before, after) {
+            return before.head !== after.head || before.refs !== after.refs || before.status !== after.status;
+          }
+
+          function findExactExecutable(root, filename) {
+            const matches = [];
+            const pending = [root];
+            while (pending.length > 0) {
+              const current = pending.pop();
+              for (const entry of readdirSync(current, { withFileTypes: true })) {
+                const path = join(current, entry.name);
+                if (entry.isDirectory()) pending.push(path);
+                else if (entry.isFile() && entry.name.toLowerCase() === filename.toLowerCase()) matches.push(path);
+              }
+            }
+            if (matches.length !== 1) {
+              throw Object.assign(new Error(`expected exactly one ${filename}; observed ${matches.length}`), { result: 'LAUNCH_FAILED' });
+            }
+            return matches[0];
+          }
+
+          async function downloadVerified(url, destination, expectedSha256) {
+            const response = await fetch(url, { redirect: 'follow' });
+            if (!response.ok) {
+              throw Object.assign(new Error(`public release download returned HTTP ${response.status}`), { result: 'INTEGRITY_FAILED' });
+            }
+            const bytes = Buffer.from(await response.arrayBuffer());
+            const observed = createHash('sha256').update(bytes).digest('hex');
+            if (observed !== expectedSha256) {
+              throw Object.assign(new Error(`release asset SHA-256 mismatch`), { result: 'INTEGRITY_FAILED' });
+            }
+            writeFileSync(destination, bytes, { flag: 'wx' });
+          }
+
+          function extractVerifiedAsset(assetPath, extractRoot) {
+            mkdirSync(extractRoot, { recursive: false });
+            const command = process.platform === 'win32' ? 'tar.exe' : 'tar';
+            const extraction = spawnSync(command, ['-xf', assetPath, '-C', extractRoot], {
+              cwd: probeRoot,
+              encoding: 'utf8',
+              shell: false,
+              timeout: 120_000,
+            });
+            if (extraction.error || extraction.status !== 0) {
+              throw Object.assign(new Error(`verified release extraction failed`), { result: 'LAUNCH_FAILED' });
+            }
+          }
+
+          function safeEnvironment(candidateRoot, candidateId) {
+            const configRoot = join(candidateRoot, 'config');
+            const sessionRoot = join(candidateRoot, 'sessions');
+            const tempRoot = join(candidateRoot, 'tmp');
+            for (const directory of [configRoot, sessionRoot, tempRoot]) mkdirSync(directory, { recursive: true });
+
+            const values = {
+              PATH: process.env.PATH ?? process.env.Path ?? '',
+              CI: 'true',
+              NO_COLOR: '1',
+              TERM: 'dumb',
+              HOME: configRoot,
+              TMP: tempRoot,
+              TEMP: tempRoot,
+              XDG_CONFIG_HOME: configRoot,
+              XDG_CACHE_HOME: join(configRoot, 'cache'),
+              XDG_DATA_HOME: join(configRoot, 'data'),
+            };
+
+            if (process.platform === 'win32') {
+              for (const key of ['SystemRoot', 'WINDIR', 'COMSPEC', 'PATHEXT']) {
+                if (process.env[key] !== undefined) values[key] = process.env[key];
+              }
+              values.USERPROFILE = configRoot;
+              values.APPDATA = join(configRoot, 'AppData', 'Roaming');
+              values.LOCALAPPDATA = join(configRoot, 'AppData', 'Local');
+            }
+
+            if (candidateId === 'github-copilot-cli') {
+              values.COPILOT_HOME = configRoot;
+              values.COPILOT_AUTO_UPDATE = 'false';
+            } else {
+              values.PI_CODING_AGENT_DIR = configRoot;
+              values.PI_CODING_AGENT_SESSION_DIR = sessionRoot;
+            }
+            return values;
+          }
+
+          function boundedReason(error) {
+            const text = error instanceof Error ? error.message : String(error);
+            return text.replace(/[\r\n]+/g, ' ').slice(0, 240);
+          }
+
+          function baseRecord(definition) {
+            return {
+              source: 'HOSTED_CLI_FEASIBILITY',
+              candidate_id: definition.id,
+              candidate_version: definition.version,
+              platform: selected.platform,
+              arch: selected.arch,
+              observation_status: 'UNVERIFIED',
+              observation_result: 'OTHER_FAILURE',
+              failure_reason: null,
+              executable_present: false,
+              version_exact: false,
+              help_exit_code: null,
+              programmatic_surface_observed: 'UNVERIFIED',
+              machine_readable_surface_observed: 'UNVERIFIED',
+              cwd_control_surface_observed: definition.id === 'pi-coding-agent' ? 'NOT_APPLICABLE' : 'UNVERIFIED',
+              permission_control_surface_observed: 'UNVERIFIED',
+              provider_model_identity_surface_observed: 'UNVERIFIED',
+              configuration_isolation_surface_observed: 'UNVERIFIED',
+              provider_request_made: false,
+              authentication_attempted: false,
+              secret_referenced: false,
+              repository_mutated: 'UNKNOWN',
+            };
+          }
+
+          (async () => {
+            const { superviseProcess } = await import('./packages/runtime/src/process.ts');
+            const initialRepository = snapshotRepository();
+            let failed = false;
+
+            const definitions = [
+              {
+                id: 'github-copilot-cli',
+                version: '1.0.82',
+                releaseBase: 'https://github.com/github/copilot-cli/releases/download/v1.0.82',
+                executable: process.platform === 'win32' ? 'copilot.exe' : 'copilot',
+                asset: selected.copilot.asset,
+                sha256: selected.copilot.sha256,
+                versionArgs: ['--version'],
+                helpArgs: ['--help'],
+                detect(help) {
+                  return {
+                    programmatic_surface_observed: help.includes('--prompt') && /(^|\s)-p([,\s]|$)/m.test(help),
+                    machine_readable_surface_observed: help.includes('--output-format') && /json/i.test(help),
+                    cwd_control_surface_observed: /(^|\s)-C([,\s]|$)/m.test(help),
+                    permission_control_surface_observed: help.includes('--deny-tool') && help.includes('--available-tools') && help.includes('--no-ask-user'),
+                    provider_model_identity_surface_observed: help.includes('--model'),
+                    configuration_isolation_surface_observed: help.includes('COPILOT_HOME') || help.includes('--config-dir'),
+                  };
+                },
+              },
+              {
+                id: 'pi-coding-agent',
+                version: '0.84.4',
+                releaseBase: 'https://github.com/earendil-works/pi/releases/download/v0.84.4',
+                executable: process.platform === 'win32' ? 'pi.exe' : 'pi',
+                asset: selected.pi.asset,
+                sha256: selected.pi.sha256,
+                versionArgs: ['--offline', '--version'],
+                helpArgs: ['--offline', '--help'],
+                detect(help) {
+                  return {
+                    programmatic_surface_observed: help.includes('--print'),
+                    machine_readable_surface_observed: help.includes('--mode') && /\bjson\b/i.test(help) && /\brpc\b/i.test(help),
+                    cwd_control_surface_observed: 'NOT_APPLICABLE',
+                    permission_control_surface_observed: help.includes('--no-tools') && help.includes('--tools') && help.includes('--exclude-tools'),
+                    provider_model_identity_surface_observed: help.includes('--provider') && help.includes('--model'),
+                    configuration_isolation_surface_observed: help.includes('PI_CODING_AGENT_DIR'),
+                  };
+                },
+              },
+            ];
+
+            async function observe(definition) {
+              const record = baseRecord(definition);
+              const before = snapshotRepository();
+              const candidateRoot = join(probeRoot, definition.id);
+              if (existsSync(candidateRoot)) {
+                throw Object.assign(new Error('candidate temporary root unexpectedly already exists'), { result: 'INTEGRITY_FAILED' });
+              }
+              mkdirSync(candidateRoot, { recursive: false });
+              const assetPath = join(candidateRoot, basename(definition.asset));
+              const extractRoot = join(candidateRoot, 'extract');
+              const workRoot = join(candidateRoot, 'work');
+              mkdirSync(workRoot, { recursive: false });
+
+              try {
+                await downloadVerified(`${definition.releaseBase}/${definition.asset}`, assetPath, definition.sha256);
+                extractVerifiedAsset(assetPath, extractRoot);
+                const executable = findExactExecutable(extractRoot, definition.executable);
+                record.executable_present = true;
+                if (process.platform !== 'win32') chmodSync(executable, 0o755);
+                if (!statSync(executable).isFile()) {
+                  throw Object.assign(new Error('resolved executable is not a regular file'), { result: 'LAUNCH_FAILED' });
+                }
+
+                const environment = safeEnvironment(candidateRoot, definition.id);
+                const run = async (args) => {
+                  const allowed = JSON.stringify(args) === JSON.stringify(definition.versionArgs) || JSON.stringify(args) === JSON.stringify(definition.helpArgs);
+                  if (!allowed) throw Object.assign(new Error('unauthorized recovery-probe argv'), { result: 'LAUNCH_FAILED' });
+                  const supervised = superviseProcess({
+                    command: executable,
+                    args,
+                    cwd: workRoot,
+                    environment: { mode: 'EXACT', values: environment },
+                    timeoutMs: 15_000,
+                    terminationGraceMs: 1_000,
+                    outputLimitBytes: 65_536,
+                  });
+                  const result = await supervised.result;
+                  if (result.cause === 'TIMED_OUT') {
+                    const status = result.cleanupStatus === 'SUCCEEDED' ? 'FAIL' : 'UNVERIFIED';
+                    throw Object.assign(new Error(`CLI observation timed out; cleanup=${result.cleanupStatus}`), { result: 'TIMEOUT', status });
+                  }
+                  if (result.cause !== 'EXITED') {
+                    throw Object.assign(new Error(`CLI observation ended with ${result.cause}; cleanup=${result.cleanupStatus}`), { result: 'LAUNCH_FAILED' });
+                  }
+                  return result;
+                };
+
+                // Exact version is deliberately the first candidate executable observation.
+                const versionResult = await run(definition.versionArgs);
+                if (versionResult.exitCode !== 0) {
+                  throw Object.assign(new Error(`version observation exited ${versionResult.exitCode}`), { result: 'VERSION_MISMATCH' });
+                }
+                const versionText = `${versionResult.stdout}\n${versionResult.stderr}`;
+                const escapedVersion = definition.version.replace(/\./g, '\\.');
+                if (!new RegExp(`(^|\\D)${escapedVersion}(\\D|$)`).test(versionText)) {
+                  throw Object.assign(new Error('exact candidate version was not observed'), { result: 'VERSION_MISMATCH' });
+                }
+                record.version_exact = true;
+
+                const helpResult = await run(definition.helpArgs);
+                record.help_exit_code = helpResult.exitCode;
+                if (helpResult.exitCode !== 0) {
+                  throw Object.assign(new Error(`help observation exited ${helpResult.exitCode}`), { result: 'LAUNCH_FAILED' });
+                }
+                const help = `${helpResult.stdout}\n${helpResult.stderr}`;
+                Object.assign(record, definition.detect(help));
+
+                const after = snapshotRepository();
+                record.repository_mutated = repositoryChanged(before, after);
+                if (record.repository_mutated) {
+                  throw Object.assign(new Error('candidate observation changed repository HEAD, refs, or worktree state'), { result: 'OTHER_FAILURE' });
+                }
+
+                record.observation_status = 'PASS';
+                record.observation_result = 'COMPLETED';
+                record.failure_reason = null;
+              } catch (error) {
+                const after = snapshotRepository();
+                record.repository_mutated = repositoryChanged(before, after);
+                record.observation_status = error && error.status === 'FAIL' ? 'FAIL' : 'UNVERIFIED';
+                record.observation_result = error && typeof error.result === 'string' ? error.result : 'OTHER_FAILURE';
+                record.failure_reason = boundedReason(error);
+                failed = true;
+              }
+
+              console.log(JSON.stringify(record));
+            }
+
+            for (const definition of definitions) await observe(definition);
+
+            const finalRepository = snapshotRepository();
+            if (repositoryChanged(initialRepository, finalRepository)) {
+              failed = true;
+              console.log(JSON.stringify({
+                source: 'HOSTED_CLI_FEASIBILITY',
+                observation_status: 'FAIL',
+                observation_result: 'OTHER_FAILURE',
+                failure_reason: 'overall probe changed repository HEAD, refs, or worktree state',
+              }));
+            }
+
+            if (failed) process.exitCode = 1;
+          })().catch((error) => {
+            console.error(`gold recovery probe harness failed: ${boundedReason(error)}`);
+            process.exitCode = 1;
+          });
+          NODE
