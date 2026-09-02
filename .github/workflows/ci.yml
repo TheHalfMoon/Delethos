@@ -714,7 +714,7 @@ jobs:
 
   opencode-recovery-probe:
     name: opencode recovery probe / ${{ matrix.os }}
-    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[opencode-recovery-probe]') }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'TheHalfMoon/Delethos' && contains(github.event.head_commit.message, '[opencode-recovery-probe]') }}
     strategy:
       fail-fast: false
       matrix:
@@ -1093,7 +1093,9 @@ jobs:
               record.permission_policy_surface_observed = resolvedDeny;
               record.configuration_isolation_surface_observed = resolvedDeny && resolvedNoUpdate;
               record.project_config_disable_surface_observed = resolvedDeny && resolvedNoUpdate && hasLiteral('OPENCODE_DISABLE_PROJECT_CONFIG');
-              record.plugin_install_suppression_surface_observed = hasLiteral('OPENCODE_PURE') && !containsPathFragment(configRoot, 'node_modules');
+              const pluginRoots = [configRoot, dataRoot, cacheRoot, stateRoot, homeRoot, tempRoot, workRoot];
+              record.plugin_install_suppression_surface_observed =
+                hasLiteral('OPENCODE_PURE') && !pluginRoots.some((root) => containsPathFragment(root, 'node_modules'));
               record.auto_update_disable_surface_observed = resolvedNoUpdate && hasLiteral('OPENCODE_DISABLE_AUTOUPDATE');
 
               const required = [
