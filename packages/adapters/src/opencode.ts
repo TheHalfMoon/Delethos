@@ -90,10 +90,10 @@ function buildOpenCodeInvocationCore(request: AdapterRunRequest, discovery: Adap
 
   const args: string[] = ['run', '--format', 'json', '--dir', request.cwd];
   if (request.provider !== undefined && request.model !== undefined) args.push('--model', `${request.provider}/${request.model}`);
-  args.push('--', request.prompt);
 
   const forbidden = new Set(['--auto', '--yolo', '--dangerously-skip-permissions']);
   if (args.some((arg) => forbidden.has(arg))) throw new Error('dangerous OpenCode bypass flag generated');
+  args.push('--', request.prompt);
 
   return {
     adapterId: request.adapterId, executablePath: discovery.executablePath, args, cwd: request.cwd,
