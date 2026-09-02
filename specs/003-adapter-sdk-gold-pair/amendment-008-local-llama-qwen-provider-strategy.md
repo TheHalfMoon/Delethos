@@ -47,6 +47,13 @@ The selected runtime is `ggml-org/llama.cpp` at release `b10621`, targeting sour
 c1d0e7a004015f23bc0233470b747b596f29b264
 ```
 
+The exact GitHub tag ref resolves directly to that commit:
+
+```text
+refs/tags/b10621 -> c1d0e7a004015f23bc0233470b747b596f29b264
+object.type = commit
+```
+
 The exact source revision is MIT licensed. Its server documentation establishes:
 
 - OpenAI-compatible chat-completion routes;
@@ -60,8 +67,11 @@ The exact source revision is MIT licensed. Its server documentation establishes:
 Source references:
 
 ```text
+https://api.github.com/repos/ggml-org/llama.cpp/git/ref/tags/b10621
 https://github.com/ggml-org/llama.cpp/releases/tag/b10621
 https://github.com/ggml-org/llama.cpp/blob/c1d0e7a004015f23bc0233470b747b596f29b264/LICENSE
+https://github.com/ggml-org/llama.cpp/blob/c1d0e7a004015f23bc0233470b747b596f29b264/common/build-info.cpp.in
+https://github.com/ggml-org/llama.cpp/blob/c1d0e7a004015f23bc0233470b747b596f29b264/scripts/build-info.sh
 https://github.com/ggml-org/llama.cpp/blob/c1d0e7a004015f23bc0233470b747b596f29b264/tools/server/README.md
 https://github.com/ggml-org/llama.cpp/blob/c1d0e7a004015f23bc0233470b747b596f29b264/docs/function-calling.md
 ```
@@ -84,7 +94,52 @@ asset = llama-b10621-bin-win-cpu-x64.zip
 sha256 = 0e8b65e650e369f70f8307d890508886f171ef4fb00facccddd4a1b7ffdaca51
 ```
 
-The GitHub release reports `immutable = false`. Therefore a tag or filename alone is insufficient provenance. Qualification must fail closed unless the downloaded archive digest matches the exact value above and the extracted executable reports the expected release/source identity. Any changed upstream asset with a different digest requires a later canonical amendment rather than silent acceptance.
+The GitHub release reports `immutable = false`. Therefore a tag or filename alone is insufficient provenance.
+
+### Normative runtime identity attestation
+
+R181 must use one portable fail-closed procedure on every required platform. No platform-specific substitute or inferred identity is allowed.
+
+Before downloading the runtime archive, the qualification script must fetch the public GitHub tag ref and require exactly:
+
+```text
+ref = refs/tags/b10621
+object.type = commit
+object.sha = c1d0e7a004015f23bc0233470b747b596f29b264
+```
+
+It must then fetch the `b10621` release asset metadata for the selected platform and require both the exact asset filename and the exact GitHub-published `sha256:` digest listed above.
+
+After download and **before extraction**, the qualification script must independently compute SHA-256 over the archive bytes and require exact equality with the pinned digest. Redirect targets, cache metadata, HTTP ETags, filenames, and successful extraction are not identity evidence.
+
+After extraction, the qualification script must locate exactly one platform-appropriate `llama-server` executable **inside the verified extraction root**. Zero or multiple matching server executables fail closed. Symlink/reparse resolution must not escape the extraction root.
+
+The script must invoke that exact executable directly with `--version`, capture the bounded version output, and parse the upstream build-info form:
+
+```text
+version: <runtime-version> (build <build-number>, commit <short-commit>)
+```
+
+The accepted runtime observation is normative:
+
+```text
+build-number = 10621
+short-commit length >= 7
+runtime_commit startsWith(short-commit) = true
+```
+
+where `runtime_commit` is the full pinned commit `c1d0e7a004015f23bc0233470b747b596f29b264`.
+
+This check is intentionally split into independent claims:
+
+1. **source selection:** the public tag ref resolves to the exact full source commit;
+2. **artifact identity:** GitHub release metadata and locally computed archive SHA-256 agree with the exact pinned platform digest;
+3. **executable containment:** the launched `llama-server` comes uniquely from that verified extracted archive;
+4. **runtime consistency:** the executable reports build `10621` and a commit prefix of the exact pinned source commit.
+
+The executable version string alone does **not** prove source provenance. The archive digest alone does **not** prove which extracted executable was launched. R181 passes `runtime_executable_identity_exact` only when all four claims are machine-observed together in one job.
+
+Any mismatch, missing field, ambiguous executable, extraction-root escape, malformed version output, build-number mismatch, or commit-prefix mismatch is a prerequisite failure and requires reconciliation rather than fallback.
 
 ## Model provenance
 
@@ -375,7 +430,10 @@ After this amendment is canonical and authority is re-read, `D003-R181` may exec
 Each required platform must machine-observe all of these prerequisite facts:
 
 ```text
+runtime_tag_commit_exact
+runtime_release_asset_digest_metadata_exact
 runtime_archive_digest_exact
+runtime_executable_contained_unique
 runtime_executable_identity_exact
 model_digest_exact
 server_loopback_only
@@ -453,7 +511,8 @@ A canonical-main workflow trigger may be added only after its implementation PR 
 - use no repository or vendor secrets;
 - install exact Pi/OpenCode versions from the canonical Amendment 007 baselines;
 - download only the pinned runtime/model artifacts described above;
-- verify every digest before execution;
+- perform the full normative runtime identity attestation before provider launch;
+- verify the model digest before provider launch;
 - run only against generated temporary fixture repositories;
 - validate and record the exact Pi tool allowlist and OpenCode default-deny permission posture before provider launch;
 - emit bounded machine-readable records without raw prompts, transcripts, environment dumps, or hidden reasoning;
@@ -500,9 +559,12 @@ No R181 smoke fact may silently delete, collapse, or pre-mark an R190/R200 Gold 
 Any of these outcomes keeps the strategy unqualified and blocks provider-backed Gold work:
 
 ```text
+runtime tag/commit mismatch
+release asset metadata digest mismatch
 archive digest mismatch
+ambiguous or escaping runtime executable
+runtime build/commit observation mismatch
 model digest mismatch
-runtime identity mismatch
 server bind outside loopback
 server requires unexpected auth
 model load failure
