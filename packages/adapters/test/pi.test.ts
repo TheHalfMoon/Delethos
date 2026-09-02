@@ -50,7 +50,7 @@ test('Pi conformance invocation is machine-readable, sessionless, shell-free sha
   assert.ok(plan.args.includes('--no-approve'));
   assert.equal(plan.args[plan.args.indexOf('--provider') + 1], 'local-provider');
   assert.equal(plan.args[plan.args.indexOf('--model') + 1], 'model-id');
-  assert.equal(plan.args.at(-1), 'make the bounded change');
+  assert.deepEqual(plan.args.slice(-2), ['--', 'make the bounded change']);
   assert.equal(plan.requestedProvider, 'local-provider');
   assert.equal(plan.requestedModel, 'model-id');
   assert.equal(plan.environment.mode, 'EXACT');
@@ -59,6 +59,11 @@ test('Pi conformance invocation is machine-readable, sessionless, shell-free sha
   assert.ok(!plan.args.includes('--api-key'));
   assert.ok(!plan.args.includes('--approve'));
   assert.ok(!plan.args.includes('-a'));
+});
+
+test('Pi option terminator protects dash-prefixed prompt text', () => {
+  const plan = buildPiConformanceInvocation(request({ prompt: '--approve' }), discovery);
+  assert.deepEqual(plan.args.slice(-2), ['--', '--approve']);
 });
 
 test('Pi refuses ambient configuration, partial identity, read-only, and resume shaping', () => {
