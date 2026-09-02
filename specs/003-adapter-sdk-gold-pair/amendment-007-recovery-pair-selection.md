@@ -15,7 +15,7 @@ anthropic-claude-code
 
 The blocker is operational and evidence-based rather than a preference change.
 
-For Codex, canonical no-auth evidence proves the bounded discovery/version/platform/auth-failure subset, but the remaining Gold matrix requires provider-backed execution for which canonical Delethos evidence does not establish a usable credentialed environment. Amendment 005 also records that the current official/recommended local Codex path is materially centered on GPT-OSS models and large context requirements; no bounded cross-platform local model/runtime profile has been machine-qualified for the required hosted matrix.
+For Codex, canonical no-auth evidence proves the bounded discovery/version/platform/auth-failure subset, but the remaining Gold matrix requires provider-backed execution for which canonical Delethos evidence does not establish a usable credentialed environment. Amendment 005 also records that the current official/recommended local Codex path is materially centered on GPT-OSS models and large context requirements; no bounded cross-platform local model/runtime profile has been machine-qualified for the required hosted-execution Gold matrix.
 
 For Claude Code, canonical evidence proves only the separately authorized missing-executable sentinel sub-fact. Actual hosted Claude installation/discovery/execution remains controlled by Amendment 003 and requires a genuine vendor-use/provenance authority chain that ordinary founder approval, technical installability, or public release availability cannot substitute for.
 
@@ -250,7 +250,7 @@ The adapter must never use these dangerous postures as a Delethos safety mechani
 --dangerously-skip-permissions
 ```
 
-OpenCode `READ_ONLY` begins `UNVERIFIED`; deny/permission configuration observed in the provider-free probe is not by itself proof that a provider-backed review run permits intended reads while blocking the required forbidden write.
+OpenCode `READ_ONLY` begins `UNVERIFIED`; deny/permission configuration observed in the provider-free probe is not by itself proof that a provider-backed review run permits intended reads while blocking the forbidden write required by the read-only case.
 
 ## Provider/model strategy remains gated
 
