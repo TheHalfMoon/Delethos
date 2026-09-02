@@ -152,9 +152,12 @@ export function parsePiJsonl(stdout: string): ParsedPi {
         finalMessage = assistantText(message);
         if (typeof message.model === 'string') observedModel = message.model;
         if (typeof message.provider === 'string') observedProvider = message.provider;
-        if (message.stopReason === 'error') providerFailed = true;
+        if (message.stopReason === 'error' || message.stopReason === 'aborted') providerFailed = true;
         if (message.stopReason === 'aborted') warnings.push('Pi assistant message ended with aborted stopReason');
-        if (typeof message.errorMessage === 'string' && message.errorMessage.length > 0) warnings.push('Pi assistant message reported an errorMessage');
+        if (typeof message.errorMessage === 'string' && message.errorMessage.length > 0) {
+          providerFailed = true;
+          warnings.push('Pi assistant message reported an errorMessage');
+        }
       }
     }
     if (!type) warnings.push('Pi event without string type');
