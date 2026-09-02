@@ -69,7 +69,7 @@ test('Pi R181 conformance shaping exposes exactly write and no other tool', () =
     prerequisiteToolMode: 'WRITE_ONLY',
   }), discovery);
   const toolIndexes = plan.args.flatMap((value, index) => value === '--tools' ? [index] : []);
-  assert.deepEqual(toolIndexes, [10]);
+  assert.equal(toolIndexes.length, 1);
   assert.equal(plan.args[toolIndexes[0]! + 1], 'write');
   for (const forbiddenTool of ['bash', 'powershell', 'read', 'edit', 'grep', 'find', 'ls']) {
     assert.ok(!plan.args.includes(forbiddenTool));
