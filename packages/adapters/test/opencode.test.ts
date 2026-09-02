@@ -59,7 +59,7 @@ test('OpenCode conformance invocation uses exact run JSON cwd and composite prov
   assert.deepEqual(plan.args.slice(0, 3), ['run', '--format', 'json']);
   assert.equal(plan.args[plan.args.indexOf('--dir') + 1], resolve('.'));
   assert.equal(plan.args[plan.args.indexOf('--model') + 1], 'local-provider/model-id');
-  assert.equal(plan.args.at(-1), 'make the bounded change');
+  assert.deepEqual(plan.args.slice(-2), ['--', 'make the bounded change']);
   assert.equal(plan.requestedProvider, 'local-provider');
   assert.equal(plan.requestedModel, 'model-id');
   assert.equal(plan.environment.mode, 'EXACT');
@@ -69,6 +69,11 @@ test('OpenCode conformance invocation uses exact run JSON cwd and composite prov
   assert.ok(!plan.args.includes('--auto'));
   assert.ok(!plan.args.includes('--yolo'));
   assert.ok(!plan.args.includes('--dangerously-skip-permissions'));
+});
+
+test('OpenCode option terminator protects dash-prefixed prompt text', () => {
+  const plan = buildOpenCodeConformanceInvocation(request({ prompt: '--auto' }), discovery);
+  assert.deepEqual(plan.args.slice(-2), ['--', '--auto']);
 });
 
 test('OpenCode refuses ambient configuration, incomplete isolation, partial identity, read-only, and resume shaping', () => {
@@ -105,6 +110,7 @@ test('OpenCode JSONL parser fails closed on malformed, error, and session-identi
     JSON.stringify({ type: 'text', sessionID: 's1', part: { type: 'text', text: 'one' } }),
     JSON.stringify({ type: 'text', sessionID: 's2', part: { type: 'text', text: 'two' } }),
   ].join('\n'));
+  assert.equal(drift.invalid, true);
   assert.ok(drift.warnings.some((value) => value.includes('changed sessionID')));
 });
 
