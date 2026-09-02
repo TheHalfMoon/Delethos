@@ -18,13 +18,16 @@ export const PI_DEFINITION: AdapterDefinition = {
   },
 };
 
+type PiPrerequisiteToolMode = 'WRITE_ONLY';
+
 type ConformanceRunRequest = Omit<AdapterRunRequest, 'environmentPolicy'> & {
   readonly environmentPolicy?: AdapterEnvironmentPolicy;
   readonly environment?: Readonly<Record<string, string>>;
+  readonly prerequisiteToolMode?: PiPrerequisiteToolMode;
 };
 
 function normalizeConformanceRequest(request: ConformanceRunRequest): AdapterRunRequest {
-  const { environment, environmentPolicy, ...rest } = request;
+  const { environment, environmentPolicy, prerequisiteToolMode: _prerequisiteToolMode, ...rest } = request;
   return {
     ...rest,
     environmentPolicy: environmentPolicy ?? (environment === undefined ? { mode: 'INHERIT' } : { mode: 'EXACT', values: environment }),
@@ -62,12 +65,26 @@ function requirePiIsolation(request: AdapterRunRequest): void {
   if (process.platform === 'win32') requireAbsoluteEnvironmentPath(request.environmentPolicy.values, 'USERPROFILE');
 }
 
-function buildPiInvocationCore(request: AdapterRunRequest, discovery: AdapterDiscovery, productDispatch: boolean): InvocationPlan {
+function validatePrerequisiteToolMode(request: AdapterRunRequest, productDispatch: boolean, prerequisiteToolMode: unknown): PiPrerequisiteToolMode | undefined {
+  if (prerequisiteToolMode === undefined) return undefined;
+  if (productDispatch) throw new TypeError('Pi prerequisite tool mode is conformance-only');
+  if (prerequisiteToolMode !== 'WRITE_ONLY') throw new TypeError('Pi prerequisite tool mode must be WRITE_ONLY');
+  if (request.posture !== 'WRITE') throw new TypeError('Pi WRITE_ONLY prerequisite tool mode requires WRITE posture');
+  return prerequisiteToolMode;
+}
+
+function buildPiInvocationCore(
+  request: AdapterRunRequest,
+  discovery: AdapterDiscovery,
+  productDispatch: boolean,
+  prerequisiteToolMode?: unknown,
+): InvocationPlan {
   validateAdapterRunRequest(request);
   if (request.adapterId !== 'pi-coding-agent') throw new TypeError('request is not for Pi');
   requireDiscovery(discovery);
   if (productDispatch) enforceProductCapabilities(request);
   requirePiIsolation(request);
+  const boundedPrerequisiteToolMode = validatePrerequisiteToolMode(request, productDispatch, prerequisiteToolMode);
   if (request.configurationPosture !== undefined && request.configurationPosture !== 'NOT_APPLICABLE') throw new TypeError('Pi does not use Claude configuration posture');
   if (request.maxTurns !== undefined || request.maxBudgetUsd !== undefined) throw new TypeError('Pi turn/budget controls are not authorized by this adapter');
   if (request.posture === 'READ_ONLY') throw new TypeError('Pi READ_ONLY is not authorized until an enforced boundary is independently qualified');
@@ -84,6 +101,7 @@ function buildPiInvocationCore(request: AdapterRunRequest, discovery: AdapterDis
     '--no-context-files',
     '--no-approve',
   ];
+  if (boundedPrerequisiteToolMode === 'WRITE_ONLY') args.push('--tools', 'write');
   if (request.provider !== undefined && request.model !== undefined) args.push('--provider', request.provider, '--model', request.model);
 
   const forbidden = new Set(['--api-key', '--approve', '-a']);
@@ -103,7 +121,7 @@ export function buildPiInvocation(request: AdapterRunRequest, discovery: Adapter
 }
 
 export function buildPiConformanceInvocation(request: ConformanceRunRequest, discovery: AdapterDiscovery): InvocationPlan {
-  return buildPiInvocationCore(normalizeConformanceRequest(request), discovery, false);
+  return buildPiInvocationCore(normalizeConformanceRequest(request), discovery, false, request.prerequisiteToolMode);
 }
 
 interface ParsedPi {
@@ -206,7 +224,7 @@ function runPiWithPlan(request: AdapterRunRequest, discovery: AdapterDiscovery, 
 // Internal/manual conformance path. It bypasses public capability promotion gates but retains exact request, isolation, and safety validation.
 export function runPi(request: ConformanceRunRequest, discovery: AdapterDiscovery) {
   const normalized = normalizeConformanceRequest(request);
-  return runPiWithPlan(normalized, discovery, buildPiInvocationCore(normalized, discovery, false));
+  return runPiWithPlan(normalized, discovery, buildPiInvocationCore(normalized, discovery, false, request.prerequisiteToolMode));
 }
 
 export function runPiQualified(request: AdapterRunRequest, discovery: AdapterDiscovery) {

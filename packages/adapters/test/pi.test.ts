@@ -59,6 +59,30 @@ test('Pi conformance invocation is machine-readable, sessionless, shell-free sha
   assert.ok(!plan.args.includes('--api-key'));
   assert.ok(!plan.args.includes('--approve'));
   assert.ok(!plan.args.includes('-a'));
+  assert.ok(!plan.args.includes('--tools'));
+});
+
+test('Pi R181 conformance shaping exposes exactly write and no other tool', () => {
+  const plan = buildPiConformanceInvocation(request({
+    provider: 'delethos-local-llama',
+    model: 'delethos-qwen25-coder-1.5b-q4km',
+    prerequisiteToolMode: 'WRITE_ONLY',
+  }), discovery);
+  const toolIndexes = plan.args.flatMap((value, index) => value === '--tools' ? [index] : []);
+  assert.equal(toolIndexes.length, 1);
+  assert.equal(plan.args[toolIndexes[0]! + 1], 'write');
+  for (const forbiddenTool of ['bash', 'powershell', 'read', 'edit', 'grep', 'find', 'ls']) {
+    assert.ok(!plan.args.includes(forbiddenTool));
+  }
+  assert.ok(plan.args.includes('--no-extensions'));
+  assert.ok(plan.args.includes('--no-skills'));
+  assert.equal(plan.requestedProvider, 'delethos-local-llama');
+  assert.equal(plan.requestedModel, 'delethos-qwen25-coder-1.5b-q4km');
+});
+
+test('Pi R181 tool shaping fails closed outside the exact conformance-only mode', () => {
+  assert.throws(() => buildPiConformanceInvocation(request({ prerequisiteToolMode: 'READ_WRITE' as never }), discovery), /must be WRITE_ONLY/);
+  assert.throws(() => buildPiConformanceInvocation(request({ prerequisiteToolMode: 'WRITE_ONLY', posture: 'READ_ONLY' }), discovery), /requires WRITE posture|READ_ONLY is not authorized/);
 });
 
 test('Pi option terminator protects dash-prefixed prompt text', () => {
