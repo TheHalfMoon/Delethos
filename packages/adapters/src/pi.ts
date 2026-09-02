@@ -85,10 +85,10 @@ function buildPiInvocationCore(request: AdapterRunRequest, discovery: AdapterDis
     '--no-approve',
   ];
   if (request.provider !== undefined && request.model !== undefined) args.push('--provider', request.provider, '--model', request.model);
-  args.push('--', request.prompt);
 
   const forbidden = new Set(['--api-key', '--approve', '-a']);
   if (args.some((arg) => forbidden.has(arg))) throw new Error('dangerous or secret-bearing Pi flag generated');
+  args.push('--', request.prompt);
 
   return {
     adapterId: request.adapterId, executablePath: discovery.executablePath, args, cwd: request.cwd,
