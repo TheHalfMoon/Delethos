@@ -185,17 +185,51 @@ function git(args, cwd) {
   return runSync('git', args, { cwd, timeoutMs: 30_000, label: `git ${args[0]}` }).replace(/\r\n/g, '\n').trimEnd();
 }
 
+function sha256File(path) {
+  return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+function snapshotHooks(gitDir) {
+  const hooksRoot = join(gitDir, 'hooks');
+  if (!existsSync(hooksRoot)) return '';
+  const entries = [];
+  const pending = [hooksRoot];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    const children = readdirSync(current, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of children) {
+      const path = join(current, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(path);
+        continue;
+      }
+      const stat = lstatSync(path);
+      if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('fixture Git hooks must contain only regular files');
+      entries.push(`${relative(hooksRoot, path).split(sep).join('/')}\0${stat.mode & 0o777}\0${sha256File(path)}`);
+    }
+  }
+  return entries.sort().join('\n');
+}
+
 function snapshotRepository(cwd) {
+  const gitDir = git(['rev-parse', '--absolute-git-dir'], cwd);
+  const configPath = join(gitDir, 'config');
   return {
     head: git(['rev-parse', 'HEAD'], cwd),
     refs: git(['for-each-ref', '--format=%(refname) %(objectname)'], cwd),
     status: git(['status', '--porcelain=v1', '--untracked-files=all'], cwd),
     remotes: git(['remote'], cwd),
+    gitConfigSha256: existsSync(configPath) ? sha256File(configPath) : null,
+    hooks: snapshotHooks(gitDir),
   };
 }
 
 function repositoryIdentityUnchanged(before, after) {
-  return before.head === after.head && before.refs === after.refs && before.remotes === after.remotes;
+  return before.head === after.head
+    && before.refs === after.refs
+    && before.remotes === after.remotes
+    && before.gitConfigSha256 === after.gitConfigSha256
+    && before.hooks === after.hooks;
 }
 
 function assertInside(root, candidate, label) {
@@ -376,9 +410,13 @@ function createFixtureRepo(root, name) {
 
 async function verifyExactSmoke(repo, before) {
   const after = snapshotRepository(repo);
-  if (!repositoryIdentityUnchanged(before, after)) throw new Error('adapter changed fixture HEAD, refs, or remotes');
+  if (!repositoryIdentityUnchanged(before, after)) throw new Error('adapter changed fixture HEAD, refs, remotes, local Git config, or hooks');
+  const smokePath = join(repo, SMOKE_FILE);
+  if (!existsSync(smokePath)) throw new Error('adapter smoke file was not created');
+  const smokeStat = lstatSync(smokePath);
+  if (!smokeStat.isFile() || smokeStat.isSymbolicLink()) throw new Error('adapter smoke target was not a regular file');
   if (after.status !== `?? ${SMOKE_FILE}`) throw new Error(`unexpected fixture worktree status: ${after.status || '<clean>'}`);
-  const content = await readFile(join(repo, SMOKE_FILE), 'utf8');
+  const content = await readFile(smokePath, 'utf8');
   if (content !== SMOKE_CONTENT) throw new Error('adapter smoke file bytes were not exact');
 }
 
@@ -496,6 +534,31 @@ async function selfTest() {
     });
     const toolIndexes = plan.args.flatMap((value, index) => value === '--tools' ? [index] : []);
     if (toolIndexes.length !== 1 || plan.args[toolIndexes[0] + 1] !== 'write') throw new Error('Pi R181 tool allowlist self-test failed');
+
+    const hookRepo = createFixtureRepo(temp, 'hook-integrity-fixture');
+    const hookBefore = snapshotRepository(hookRepo);
+    writeFileSync(join(hookRepo, SMOKE_FILE), SMOKE_CONTENT, { flag: 'wx' });
+    await verifyExactSmoke(hookRepo, hookBefore);
+    const hookGitDir = git(['rev-parse', '--absolute-git-dir'], hookRepo);
+    writeFileSync(join(hookGitDir, 'hooks', 'delethos-r181-selftest-hook'), '#!/bin/sh\nexit 0\n', { flag: 'wx' });
+    let hookMutationRejected = false;
+    try { await verifyExactSmoke(hookRepo, hookBefore); } catch { hookMutationRejected = true; }
+    if (!hookMutationRejected) throw new Error('R181 fixture hook mutation self-test failed');
+
+    const configRepo = createFixtureRepo(temp, 'config-integrity-fixture');
+    const configBefore = snapshotRepository(configRepo);
+    writeFileSync(join(configRepo, SMOKE_FILE), SMOKE_CONTENT, { flag: 'wx' });
+    git(['config', 'delethos.r181-mutated', 'true'], configRepo);
+    let configMutationRejected = false;
+    try { await verifyExactSmoke(configRepo, configBefore); } catch { configMutationRejected = true; }
+    if (!configMutationRejected) throw new Error('R181 fixture local-config mutation self-test failed');
+
+    const typeRepo = createFixtureRepo(temp, 'target-type-fixture');
+    const typeBefore = snapshotRepository(typeRepo);
+    mkdirSync(join(typeRepo, SMOKE_FILE), { recursive: false });
+    let nonFileRejected = false;
+    try { await verifyExactSmoke(typeRepo, typeBefore); } catch { nonFileRejected = true; }
+    if (!nonFileRejected) throw new Error('R181 non-file smoke target self-test failed');
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -745,11 +808,12 @@ async function main() {
     try { exportValue = JSON.parse(exported.stdout); } catch { throw new Error('OpenCode sanitized export was not valid JSON'); }
     extractOpenCodeIdentity(exportValue, opencodeResult.identity.sessionId);
     exportValue = null;
+    await verifyExactSmoke(opencodeRepo, opencodeBefore);
     mark(record, 'opencode_sanitized_export_identity_exact');
 
     const canonicalAfter = snapshotRepository(REPO_ROOT);
     if (canonicalAfter.status !== '' || !repositoryIdentityUnchanged(canonicalBefore, canonicalAfter)) {
-      throw new Error('R181 qualification changed canonical checkout HEAD, refs, remotes, or worktree state');
+      throw new Error('R181 qualification changed canonical checkout HEAD, refs, remotes, local Git config, hooks, or worktree state');
     }
     for (const root of [runtimeRoot, modelRoot, cliRoot, piRepo, opencodeRepo]) assertInside(qualificationRoot, root, 'R181 qualification path');
     mark(record, 'repository_fixture_only');
