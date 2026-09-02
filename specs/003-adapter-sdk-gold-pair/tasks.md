@@ -23,17 +23,22 @@ CODEX_HOSTED_NOAUTH_CASES = missing-binary:PASS discovery-version:PASS platform-
 CODEX_HOSTED_NOAUTH_MATRIX = linux/x64:PASS macos/arm64:PASS windows/x64:PASS
 D003_T101 = COMPLETE
 CODEX_GOLD = NOT_QUALIFIED
+CLAUDE_SENTINEL_MISSING_BINARY_REVISION = f1513318f740d66ab10575d59a112717f60a5ae4
+CLAUDE_SENTINEL_MISSING_BINARY_RUN = 33566060117
+CLAUDE_SENTINEL_MISSING_BINARY_CASE = missing-binary:PASS
+CLAUDE_SENTINEL_MISSING_BINARY_MATRIX = linux/x64:PASS macos/arm64:PASS windows/x64:PASS
+D003_T121 = OPEN_PARTIAL_MISSING_BINARY_SUBFACT_ONLY
 CLAUDE_VENDOR_USE_AUTHORITY = NOT_ESTABLISHED_IN_CANONICAL_EVIDENCE
-CLAUDE_HOSTED_NOAUTH = PROHIBITED_WHILE_GATE_UNSATISFIED
+CLAUDE_HOSTED_VENDOR_EXECUTION = PROHIBITED_WHILE_GATE_UNSATISFIED
 CLAUDE_RELEASE_PROVENANCE_GATE = SIGNED_MANIFEST_PLUS_FRESH_OFFICIAL_FINGERPRINT_REQUIRED_BEFORE_ANY_FUTURE_EXECUTION
 CLAUDE_GOLD = NOT_QUALIFIED
 ```
 
-Phases S–G and J are canonically complete. Phase H now has one completed real-qualification task, **D003-T101**, backed by the four-case hosted Codex no-auth matrix. All remaining Phase H work, all Phase I work, and Phase K remain evidence-gated. Missing credentials, vendor access, or authorized execution environments remain `UNAVAILABLE`/`UNVERIFIED`; ordinary founder approval does not substitute for them.
+Phases S–G and J are canonically complete. Phase H has one completed real-qualification task, **D003-T101**, backed by the four-case hosted Codex no-auth matrix. Phase I now has one machine-observed partial sub-fact only: the Amendment 004 sentinel missing-executable path for the Claude candidate passed on Linux/x64, macOS/arm64, and Windows/x64 at exact revision `f1513318f740d66ab10575d59a112717f60a5ae4` in run `33566060117`. **D003-T121 remains open** because invalid/missing-auth requires actual Claude execution. All remaining Phase H work, the uncompleted Phase I work, and Phase K remain evidence-gated. Missing credentials, vendor access, or authorized execution environments remain `UNAVAILABLE`/`UNVERIFIED`; ordinary founder approval does not substitute for them.
 
 Canonical hosted Codex run `33560429571` at exact revision `6f60edc8b388eca0476050ee9a87536166348fac` establishes the complete four-case no-auth subset authorized by Amendment 001 and recorded in `evidence-hosted-codex-noauth-2026-09-01.md`. Linux/x64, macOS/arm64, and Windows/x64 each machine-observed PASS for `missing-binary`, `discovery-version`, `platform-launch`, and status-only `auth-failure` using Codex `0.152.0`. The `auth-failure` record was posture-neutral, observed `auth-status=UNAUTHENTICATED`, emitted no adapter/provider/session/model result facts, and preserved clean Git head/refs/worktree state. This completes **D003-T101** only. It does not complete **D003-T100**, **D003-T102** through **D003-T115**, or any Gold/platform-complete task because the remaining claimed Gold surface requires separate credentialed/provider-backed machine evidence.
 
-Canonical Specification 003 Amendment 003 at `5ee580bf73ac602da323a07b70f862647c282fb2`, with post-merge deterministic run `33559051578` successful on Linux/macOS/Windows, establishes the fail-closed Claude hosted-qualification authority boundary. It does not establish that the repository owner lacks a vendor agreement; it records only that canonical project evidence available to this qualification context does not establish authority to install or execute Claude Code in hosted Specification 003 qualification. Any future hosted Claude execution requires a canonical non-secret authority evidence reference, exact hosted-Specification-003 scope, non-revoked current status, immediate pre-execution revalidation, fresh official release/signing facts, authenticated detached-manifest verification, and artifact/executable integrity verification. No Phase I checkbox is promoted by this governance evidence, and public release/install documentation remains shaping/provenance evidence rather than runtime qualification.
+Canonical Specification 003 Amendment 003 at `5ee580bf73ac602da323a07b70f862647c282fb2`, with post-merge deterministic run `33559051578` successful on Linux/macOS/Windows, establishes the fail-closed Claude hosted-qualification authority boundary. Amendment 004 and run `33566060117` add only a remote-log exception for the existing sentinel missing-executable branch, recorded in `evidence-hosted-claude-missing-binary-2026-09-02.md`; the run did not discover, install, authenticate, or execute Claude Code. It does not establish that the repository owner lacks a vendor agreement, nor does it establish vendor-use authority. Any future hosted Claude execution still requires a canonical non-secret authority evidence reference, exact hosted-Specification-003 scope, non-revoked current status, immediate pre-execution revalidation, fresh official release/signing facts, authenticated detached-manifest verification, and artifact/executable integrity verification. No Phase I checkbox is promoted by this partial evidence, and public release/install documentation remains shaping/provenance evidence rather than runtime qualification.
 
 ## Phase S — Successor shaping
 
