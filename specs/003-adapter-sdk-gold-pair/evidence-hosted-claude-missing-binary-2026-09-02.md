@@ -45,6 +45,21 @@ windows/x64 = 100049389864
 
 The same canonical push completed the deterministic `core` matrix successfully on Linux, macOS, and Windows. The Codex marker-gated job was skipped because the commit carried only `[claude-missing]`.
 
+## Canonical frontier vocabulary
+
+The canonical reconciliation vocabulary is identical in this evidence record, `tasks.md`, and `CURRENT.md`:
+
+```text
+CLAUDE_SENTINEL_MISSING_BINARY_REVISION = f1513318f740d66ab10575d59a112717f60a5ae4
+CLAUDE_SENTINEL_MISSING_BINARY_RUN = 33566060117
+CLAUDE_SENTINEL_MISSING_BINARY_CASE = missing-binary:PASS
+CLAUDE_SENTINEL_MISSING_BINARY_MATRIX = linux/x64:PASS macos/arm64:PASS windows/x64:PASS
+D003_T121 = OPEN_PARTIAL_MISSING_BINARY_SUBFACT_ONLY
+CLAUDE_VENDOR_USE_AUTHORITY = NOT_ESTABLISHED_IN_CANONICAL_EVIDENCE
+CLAUDE_HOSTED_VENDOR_EXECUTION = PROHIBITED_WHILE_GATE_UNSATISFIED
+CLAUDE_GOLD = NOT_QUALIFIED
+```
+
 ## Machine-observed result matrix
 
 | Platform | Architecture | Guard | `missing-binary` | Vendor executable path | Vendor CLI version |
@@ -134,12 +149,16 @@ This evidence does **not** establish:
 - terminal Specification 003 closeout;
 - Specification 004 authority.
 
-Accordingly:
+Accordingly, the canonical frontier remains:
 
 ```text
-D003_T121 = OPEN — PARTIAL_MISSING_BINARY_SUBFACT_ONLY
+CLAUDE_SENTINEL_MISSING_BINARY_REVISION = f1513318f740d66ab10575d59a112717f60a5ae4
+CLAUDE_SENTINEL_MISSING_BINARY_RUN = 33566060117
+CLAUDE_SENTINEL_MISSING_BINARY_CASE = missing-binary:PASS
+CLAUDE_SENTINEL_MISSING_BINARY_MATRIX = linux/x64:PASS macos/arm64:PASS windows/x64:PASS
+D003_T121 = OPEN_PARTIAL_MISSING_BINARY_SUBFACT_ONLY
 CLAUDE_VENDOR_USE_AUTHORITY = NOT_ESTABLISHED_IN_CANONICAL_EVIDENCE
-CLAUDE_HOSTED_EXECUTION = PROHIBITED_WHILE_GATE_UNSATISFIED
+CLAUDE_HOSTED_VENDOR_EXECUTION = PROHIBITED_WHILE_GATE_UNSATISFIED
 CLAUDE_GOLD = NOT_QUALIFIED
 SPEC_003_STATUS = ACTIVE_BLOCKED_REAL_GOLD
 SPEC_004 = NOT_AUTHORIZED
