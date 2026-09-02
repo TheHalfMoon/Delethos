@@ -2,7 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import * as adapters from '../src/index.ts';
-import { buildCodexInvocation, CODEX_DEFINITION, CLAUDE_DEFINITION, validateAdapterRunRequest } from '../src/index.ts';
+import {
+  buildCodexInvocation,
+  buildOpenCodeInvocation,
+  buildPiInvocation,
+  CODEX_DEFINITION,
+  CLAUDE_DEFINITION,
+  OPENCODE_DEFINITION,
+  PI_DEFINITION,
+  validateAdapterRunRequest,
+} from '../src/index.ts';
 
 function baseRequest(overrides = {}) {
   return {
@@ -15,7 +24,7 @@ function baseRequest(overrides = {}) {
   };
 }
 
-test('candidate capabilities begin unverified and public tier remains non-Gold', () => {
+test('legacy candidates remain non-Gold and unpromoted', () => {
   for (const definition of [CODEX_DEFINITION, CLAUDE_DEFINITION]) {
     assert.equal(definition.tier, 'EXPERIMENTAL');
     assert.equal(definition.candidateStatus, 'QUALIFYING');
@@ -27,9 +36,20 @@ test('candidate capabilities begin unverified and public tier remains non-Gold',
   }
 });
 
-test('adapter requests fail closed on unauthorized, malformed, or nonexistent values', () => {
+test('replacement Gold candidates begin selected but entirely unverified', () => {
+  for (const definition of [PI_DEFINITION, OPENCODE_DEFINITION]) {
+    assert.equal(definition.tier, 'EXPERIMENTAL');
+    assert.equal(definition.candidateStatus, 'SELECTED_GOLD_CANDIDATE');
+    assert.match(definition.implementationVersion, /^spec003-recovery\./);
+    for (const status of Object.values(definition.capabilities)) assert.equal(status, 'UNVERIFIED');
+  }
+});
+
+test('adapter requests accept only the four canonically authorized adapter identities and fail closed on malformed values', () => {
+  for (const adapterId of ['openai-codex-cli', 'anthropic-claude-code', 'pi-coding-agent', 'opencode'] as const) {
+    assert.doesNotThrow(() => validateAdapterRunRequest(baseRequest({ adapterId })));
+  }
   const base = baseRequest();
-  assert.doesNotThrow(() => validateAdapterRunRequest(base));
   assert.throws(() => validateAdapterRunRequest({ ...base, adapterId: 'other' as never }), /not authorized/);
   assert.throws(() => validateAdapterRunRequest({ ...base, cwd: 'relative' }), /absolute/);
   assert.throws(() => validateAdapterRunRequest({ ...base, cwd: resolve('definitely-missing-directory') }), /existing directory/);
@@ -45,11 +65,17 @@ test('explicit environment policy rejects unsafe names and NUL values', () => {
   assert.throws(() => validateAdapterRunRequest({ ...base, environmentPolicy: { mode: 'EXACT', values: { A: 'x\0y' } } }), /environment values/);
 });
 
-test('public Codex dispatch rejects unverified capabilities before launch, including model and session requests', () => {
-  const discovery = { adapterId: 'openai-codex-cli' as const, state: 'DISCOVERED' as const, executablePath: process.execPath, cliVersion: process.version, detail: null };
-  assert.throws(() => buildCodexInvocation(baseRequest(), discovery), /capability is UNVERIFIED/);
-  assert.throws(() => buildCodexInvocation(baseRequest({ model: 'gpt-test' }), discovery), /capability is UNVERIFIED/);
-  assert.throws(() => buildCodexInvocation(baseRequest({ sessionId: 'session-test' }), discovery), /capability is UNVERIFIED/);
+test('public candidate dispatch rejects unverified capabilities before launch', () => {
+  const codexDiscovery = { adapterId: 'openai-codex-cli' as const, state: 'DISCOVERED' as const, executablePath: process.execPath, cliVersion: process.version, detail: null };
+  assert.throws(() => buildCodexInvocation(baseRequest(), codexDiscovery), /capability is UNVERIFIED/);
+  assert.throws(() => buildCodexInvocation(baseRequest({ model: 'gpt-test' }), codexDiscovery), /capability is UNVERIFIED/);
+  assert.throws(() => buildCodexInvocation(baseRequest({ sessionId: 'session-test' }), codexDiscovery), /capability is UNVERIFIED/);
+
+  const piDiscovery = { adapterId: 'pi-coding-agent' as const, state: 'DISCOVERED' as const, executablePath: process.execPath, cliVersion: 'pi-coding-agent v0.84.4', detail: null };
+  assert.throws(() => buildPiInvocation(baseRequest({ adapterId: 'pi-coding-agent' }), piDiscovery), /capability is UNVERIFIED/);
+
+  const openCodeDiscovery = { adapterId: 'opencode' as const, state: 'DISCOVERED' as const, executablePath: process.execPath, cliVersion: '1.18.26', detail: null };
+  assert.throws(() => buildOpenCodeInvocation(baseRequest({ adapterId: 'opencode' }), openCodeDiscovery), /capability is UNVERIFIED/);
 });
 
 test('public adapter SDK exports no commit, push, merge, or release authority', () => {
