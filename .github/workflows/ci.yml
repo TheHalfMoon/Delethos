@@ -399,14 +399,24 @@ jobs:
           }
 
           async function downloadVerified(url, destination, expectedSha256) {
-            const response = await fetch(url, { redirect: 'follow' });
+            let response;
+            try {
+              response = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(90_000) });
+            } catch {
+              throw Object.assign(new Error('public release download failed or timed out'), { result: 'INTEGRITY_FAILED' });
+            }
             if (!response.ok) {
               throw Object.assign(new Error(`public release download returned HTTP ${response.status}`), { result: 'INTEGRITY_FAILED' });
             }
-            const bytes = Buffer.from(await response.arrayBuffer());
+            let bytes;
+            try {
+              bytes = Buffer.from(await response.arrayBuffer());
+            } catch {
+              throw Object.assign(new Error('public release body failed or timed out'), { result: 'INTEGRITY_FAILED' });
+            }
             const observed = createHash('sha256').update(bytes).digest('hex');
             if (observed !== expectedSha256) {
-              throw Object.assign(new Error(`release asset SHA-256 mismatch`), { result: 'INTEGRITY_FAILED' });
+              throw Object.assign(new Error('release asset SHA-256 mismatch'), { result: 'INTEGRITY_FAILED' });
             }
             writeFileSync(destination, bytes, { flag: 'wx' });
           }
@@ -421,7 +431,7 @@ jobs:
               timeout: 120_000,
             });
             if (extraction.error || extraction.status !== 0) {
-              throw Object.assign(new Error(`verified release extraction failed`), { result: 'LAUNCH_FAILED' });
+              throw Object.assign(new Error('verified release extraction failed'), { result: 'LAUNCH_FAILED' });
             }
           }
 
@@ -612,7 +622,7 @@ jobs:
                 const after = snapshotRepository();
                 record.repository_mutated = repositoryChanged(before, after);
                 if (record.repository_mutated) {
-                  throw Object.assign(new Error('candidate observation changed repository HEAD, refs, or worktree state'), { result: 'OTHER_FAILURE' });
+                  throw Object.assign(new Error('candidate observation changed repository HEAD, refs, or worktree state'), { result: 'OTHER_FAILURE', status: 'FAIL' });
                 }
 
                 record.observation_status = 'PASS';
@@ -621,7 +631,10 @@ jobs:
               } catch (error) {
                 const after = snapshotRepository();
                 record.repository_mutated = repositoryChanged(before, after);
-                record.observation_status = error && error.status === 'FAIL' ? 'FAIL' : 'UNVERIFIED';
+                record.observation_status =
+                  (error && error.status === 'FAIL') || record.repository_mutated === true
+                    ? 'FAIL'
+                    : 'UNVERIFIED';
                 record.observation_result = error && typeof error.result === 'string' ? error.result : 'OTHER_FAILURE';
                 record.failure_reason = boundedReason(error);
                 failed = true;
