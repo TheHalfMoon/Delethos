@@ -198,15 +198,6 @@ function repositoryIdentityUnchanged(before, after) {
   return before.head === after.head && before.refs === after.refs && before.remotes === after.remotes;
 }
 
-function expectedDependencyInstallStatus(status) {
-  if (status === '') return true;
-  return status.split('\n').filter(Boolean).every((line) => {
-    if (!line.startsWith('?? ')) return false;
-    const path = line.slice(3).replaceAll('\\', '/');
-    return path.startsWith('node_modules/') || /^packages\/[^/]+\/node_modules\//.test(path);
-  });
-}
-
 function assertInside(root, candidate, label) {
   const rootReal = realpathSync(root);
   const candidateReal = realpathSync(candidate);
@@ -483,12 +474,6 @@ async function selfTest() {
   const baseURL = 'http://127.0.0.1:12345/v1';
   const config = buildOpenCodeR181Config(baseURL, SMOKE_FILE);
   if (!exactOpenCodePolicy(config, baseURL)) throw new Error('OpenCode R181 policy self-test failed');
-  if (!expectedDependencyInstallStatus('?? node_modules/.pnpm/example\n?? packages/adapters/node_modules/example')) {
-    throw new Error('dependency-install baseline self-test failed');
-  }
-  for (const unsafe of [' M package.json', '?? unexpected.txt', '?? packages/adapters/src/changed.ts']) {
-    if (expectedDependencyInstallStatus(unsafe)) throw new Error('unexpected checkout dirt was accepted by dependency baseline self-test');
-  }
   const temp = mkdtempSync(join(tmpdir(), 'delethos-r181-selftest-'));
   try {
     const envRoot = join(temp, 'pi');
@@ -531,9 +516,7 @@ async function main() {
   let server = null;
 
   try {
-    if (!expectedDependencyInstallStatus(canonicalBefore.status)) {
-      throw new Error(`canonical checkout contains unexpected prequalification changes: ${boundedReason(canonicalBefore.status)}`);
-    }
+    if (canonicalBefore.status !== '') throw new Error('canonical checkout must start clean');
 
     const tag = await fetchJson(`https://api.github.com/repos/ggml-org/llama.cpp/git/ref/tags/${RUNTIME_RELEASE}`);
     if (tag?.object?.type !== 'commit' || tag?.object?.sha !== RUNTIME_COMMIT) throw new Error('runtime tag did not resolve directly to the pinned commit');
@@ -765,8 +748,8 @@ async function main() {
     mark(record, 'opencode_sanitized_export_identity_exact');
 
     const canonicalAfter = snapshotRepository(REPO_ROOT);
-    if (canonicalAfter.status !== canonicalBefore.status || !repositoryIdentityUnchanged(canonicalBefore, canonicalAfter)) {
-      throw new Error('R181 qualification changed canonical checkout HEAD, refs, remotes, or worktree baseline');
+    if (canonicalAfter.status !== '' || !repositoryIdentityUnchanged(canonicalBefore, canonicalAfter)) {
+      throw new Error('R181 qualification changed canonical checkout HEAD, refs, remotes, or worktree state');
     }
     for (const root of [runtimeRoot, modelRoot, cliRoot, piRepo, opencodeRepo]) assertInside(qualificationRoot, root, 'R181 qualification path');
     mark(record, 'repository_fixture_only');
@@ -795,7 +778,7 @@ async function main() {
       }
     }
     const canonicalFinal = snapshotRepository(REPO_ROOT);
-    if (canonicalFinal.status !== canonicalBefore.status || !repositoryIdentityUnchanged(canonicalBefore, canonicalFinal)) {
+    if (canonicalFinal.status !== '' || !repositoryIdentityUnchanged(canonicalBefore, canonicalFinal)) {
       record.outcome = 'FAIL';
       record.failed_at = 'canonical_repository_cleanup';
       record.failure_reason = 'canonical checkout changed during R181 qualification';
