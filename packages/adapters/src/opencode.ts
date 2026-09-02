@@ -18,6 +18,58 @@ export const OPENCODE_DEFINITION: AdapterDefinition = {
   },
 };
 
+export const OPENCODE_R181_PROVIDER_ID = 'delethos-local-llama';
+export const OPENCODE_R181_MODEL_ID = 'delethos-qwen25-coder-1.5b-q4km';
+
+function exactLoopbackV1BaseUrl(value: string): string {
+  let parsed: URL;
+  try { parsed = new URL(value); } catch { throw new TypeError('OpenCode R181 baseURL must be a valid URL'); }
+  if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1' || parsed.port === '' || parsed.pathname !== '/v1' || parsed.search !== '' || parsed.hash !== '' || parsed.username !== '' || parsed.password !== '') {
+    throw new TypeError('OpenCode R181 baseURL must be exact unauthenticated http://127.0.0.1:<port>/v1');
+  }
+  return parsed.toString().replace(/\/$/, '');
+}
+
+function exactFixtureWriteTarget(value: string): string {
+  if (!/^[A-Za-z0-9._-]+$/.test(value) || value === '.' || value === '..') {
+    throw new TypeError('OpenCode R181 write target must be one exact relative fixture filename');
+  }
+  return value;
+}
+
+export function buildOpenCodeR181Config(baseURL: string, exactWriteTarget: string) {
+  const normalizedBaseURL = exactLoopbackV1BaseUrl(baseURL);
+  const target = exactFixtureWriteTarget(exactWriteTarget);
+  return {
+    $schema: 'https://opencode.ai/config.json',
+    autoupdate: false,
+    provider: {
+      [OPENCODE_R181_PROVIDER_ID]: {
+        npm: '@ai-sdk/openai-compatible',
+        name: 'Delethos local llama.cpp',
+        options: { baseURL: normalizedBaseURL },
+        models: {
+          [OPENCODE_R181_MODEL_ID]: {
+            name: 'Delethos local Qwen2.5 Coder 1.5B Q4_K_M',
+          },
+        },
+      },
+    },
+    permission: {
+      '*': 'deny',
+      edit: {
+        '*': 'deny',
+        [target]: 'allow',
+      },
+      bash: 'deny',
+      external_directory: 'deny',
+      webfetch: 'deny',
+      websearch: 'deny',
+      task: 'deny',
+    },
+  } as const;
+}
+
 type ConformanceRunRequest = Omit<AdapterRunRequest, 'environmentPolicy'> & {
   readonly environmentPolicy?: AdapterEnvironmentPolicy;
   readonly environment?: Readonly<Record<string, string>>;
