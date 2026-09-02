@@ -82,6 +82,7 @@ function buildPiInvocationCore(request: AdapterRunRequest, discovery: AdapterDis
     '--no-prompt-templates',
     '--no-themes',
     '--no-context-files',
+    '--no-approve',
   ];
   if (request.provider !== undefined && request.model !== undefined) args.push('--provider', request.provider, '--model', request.model);
   args.push(request.prompt);
