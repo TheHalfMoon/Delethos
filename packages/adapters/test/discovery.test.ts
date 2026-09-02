@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { CODEX_DEFINITION, discoverAdapter, resolveExecutable } from '../src/index.ts';
+import { CODEX_DEFINITION, OPENCODE_DEFINITION, PI_DEFINITION, discoverAdapter, resolveExecutable } from '../src/index.ts';
 
 test('explicit executable discovery resolves process executable', async () => {
   const result = await resolveExecutable(process.execPath);
@@ -21,6 +21,16 @@ test('adapter discovery records exact path and version without auth inference', 
   assert.equal(result.state, 'DISCOVERED');
   assert.equal(result.executablePath !== null, true);
   assert.match(result.cliVersion ?? '', /^v?\d+/);
+});
+
+test('replacement candidate definitions flow through shared discovery without identity collapse', async () => {
+  for (const definition of [PI_DEFINITION, OPENCODE_DEFINITION]) {
+    const result = await discoverAdapter({ ...definition, versionArgs: ['--version'] }, process.cwd(), process.execPath);
+    assert.equal(result.adapterId, definition.id);
+    assert.equal(result.state, 'DISCOVERED');
+    assert.equal(result.executablePath !== null, true);
+    assert.match(result.cliVersion ?? '', /^v?\d+/);
+  }
 });
 
 test('version discovery fails closed on nonzero exit or empty version output', async () => {

@@ -1,7 +1,7 @@
 import { statSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 
-export type AdapterId = 'openai-codex-cli' | 'anthropic-claude-code';
+export type AdapterId = 'openai-codex-cli' | 'anthropic-claude-code' | 'pi-coding-agent' | 'opencode';
 export type CapabilityStatus = 'SUPPORTED' | 'PARTIAL' | 'UNSUPPORTED' | 'UNAVAILABLE' | 'UNVERIFIED';
 export type AdapterTier = 'GOLD' | 'SUPPORTED' | 'EXPERIMENTAL' | 'COMMUNITY';
 export type AdapterCandidateStatus = 'SELECTED_GOLD_CANDIDATE' | 'QUALIFYING' | 'GOLD' | 'BLOCKED';
@@ -123,6 +123,7 @@ const MAX_PROMPT = 256 * 1024;
 const MAX_ID = 512;
 const MAX_LIMIT = 64 * 1024 * 1024;
 const MAX_DELAY = 24 * 60 * 60 * 1000;
+const AUTHORIZED_ADAPTERS: ReadonlySet<AdapterId> = new Set<AdapterId>(['openai-codex-cli', 'anthropic-claude-code', 'pi-coding-agent', 'opencode']);
 
 function optionalBoundedString(name: string, value: string | undefined): void {
   if (value === undefined) return;
@@ -153,7 +154,7 @@ function validateEnvironmentPolicy(policy: AdapterEnvironmentPolicy): void {
 }
 
 export function validateAdapterRunRequest(request: AdapterRunRequest): void {
-  if (request.adapterId !== 'openai-codex-cli' && request.adapterId !== 'anthropic-claude-code') throw new TypeError('adapterId is not authorized by Specification 003');
+  if (!AUTHORIZED_ADAPTERS.has(request.adapterId)) throw new TypeError('adapterId is not authorized by Specification 003');
   if (!isAbsolute(request.cwd)) throw new TypeError('cwd must be absolute');
   requireExistingDirectory(request.cwd);
   if (typeof request.prompt !== 'string' || request.prompt.length === 0 || request.prompt.length > MAX_PROMPT || request.prompt.includes('\0')) throw new TypeError('prompt must be non-empty, bounded, and contain no NUL');

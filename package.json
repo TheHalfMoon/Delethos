@@ -8,7 +8,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --test packages/core/test/canonical.test.ts packages/core/test/policy.test.ts packages/core/test/run.test.ts packages/core/test/evidence.test.ts packages/runtime/test/git.test.ts packages/runtime/test/worktree.test.ts packages/runtime/test/process.test.ts packages/adapters/test/contract.test.ts packages/adapters/test/discovery.test.ts packages/adapters/test/invocation.test.ts packages/adapters/test/codex.test.ts packages/adapters/test/claude.test.ts packages/adapters/test/conformance.test.ts",
+    "test": "node --test packages/core/test/canonical.test.ts packages/core/test/policy.test.ts packages/core/test/run.test.ts packages/core/test/evidence.test.ts packages/runtime/test/git.test.ts packages/runtime/test/worktree.test.ts packages/runtime/test/process.test.ts packages/adapters/test/contract.test.ts packages/adapters/test/discovery.test.ts packages/adapters/test/invocation.test.ts packages/adapters/test/codex.test.ts packages/adapters/test/claude.test.ts packages/adapters/test/pi.test.ts packages/adapters/test/opencode.test.ts packages/adapters/test/conformance.test.ts",
     "check:runtime-deps": "node -e \"for (const p of ['./packages/core/package.json','./packages/runtime/package.json','./packages/adapters/package.json']) { const d=Object.entries(require(p).dependencies||{}).filter(([name,version])=>!(name.startsWith('@delethos/')&&String(version).startsWith('workspace:'))); if(d.length){console.error('external runtime dependencies are forbidden in '+p+': '+d.map(([n])=>n).join(',')); process.exit(1)} }\"",
     "check": "pnpm typecheck && pnpm test && pnpm check:runtime-deps"
   },
