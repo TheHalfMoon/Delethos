@@ -36,6 +36,7 @@ test('Pi recovery definition is selected but exposes no promoted capabilities', 
   assert.equal(PI_DEFINITION.candidateStatus, 'SELECTED_GOLD_CANDIDATE');
   assert.equal(PI_DEFINITION.tier, 'EXPERIMENTAL');
   assert.equal(PI_DEFINITION.commandName, 'pi');
+  assert.equal(PI_DEFINITION.implementationVersion, 'spec003-recovery.pi.2');
   assert.deepEqual(PI_DEFINITION.versionArgs, ['--version']);
   for (const status of Object.values(PI_DEFINITION.capabilities)) assert.equal(status, 'UNVERIFIED');
 });
@@ -60,17 +61,24 @@ test('Pi conformance invocation is machine-readable, sessionless, shell-free sha
   assert.ok(!plan.args.includes('--approve'));
   assert.ok(!plan.args.includes('-a'));
   assert.ok(!plan.args.includes('--tools'));
+  assert.ok(!plan.args.includes('--system-prompt'));
 });
 
-test('Pi R181 conformance shaping exposes exactly write and no other tool', () => {
+test('Pi R181 conformance shaping exposes exactly write with a bounded tool-use system prompt', () => {
   const plan = buildPiConformanceInvocation(request({
     provider: 'delethos-local-llama',
     model: 'delethos-qwen25-coder-1.5b-q4km',
     prerequisiteToolMode: 'WRITE_ONLY',
   }), discovery);
   const toolIndexes = plan.args.flatMap((value, index) => value === '--tools' ? [index] : []);
+  const systemPromptIndexes = plan.args.flatMap((value, index) => value === '--system-prompt' ? [index] : []);
   assert.equal(toolIndexes.length, 1);
   assert.equal(plan.args[toolIndexes[0]! + 1], 'write');
+  assert.equal(systemPromptIndexes.length, 1);
+  const systemPrompt = plan.args[systemPromptIndexes[0]! + 1];
+  assert.match(systemPrompt ?? '', /use the available write tool exactly once/i);
+  assert.match(systemPrompt ?? '', /unless the write tool has returned success/i);
+  assert.match(systemPrompt ?? '', /do not call any tool again/i);
   for (const forbiddenTool of ['bash', 'powershell', 'read', 'edit', 'grep', 'find', 'ls']) {
     assert.ok(!plan.args.includes(forbiddenTool));
   }

@@ -5,7 +5,7 @@ import { authFailureText, processEvidence, statusFromProcess, superviseInvocatio
 
 export const PI_DEFINITION: AdapterDefinition = {
   id: 'pi-coding-agent',
-  implementationVersion: 'spec003-recovery.pi.1',
+  implementationVersion: 'spec003-recovery.pi.2',
   tier: 'EXPERIMENTAL',
   candidateStatus: 'SELECTED_GOLD_CANDIDATE',
   commandName: 'pi',
@@ -19,6 +19,13 @@ export const PI_DEFINITION: AdapterDefinition = {
 };
 
 type PiPrerequisiteToolMode = 'WRITE_ONLY';
+
+const PI_WRITE_ONLY_SYSTEM_PROMPT = [
+  'You are a deterministic file-writing agent.',
+  'For the current request, use the available write tool exactly once before producing any success text.',
+  'Do not claim or imply that a file was written unless the write tool has returned success.',
+  'After a successful write tool result, do not call any tool again; reply with a short confirmation.',
+].join(' ');
 
 type ConformanceRunRequest = Omit<AdapterRunRequest, 'environmentPolicy'> & {
   readonly environmentPolicy?: AdapterEnvironmentPolicy;
@@ -101,7 +108,9 @@ function buildPiInvocationCore(
     '--no-context-files',
     '--no-approve',
   ];
-  if (boundedPrerequisiteToolMode === 'WRITE_ONLY') args.push('--tools', 'write');
+  if (boundedPrerequisiteToolMode === 'WRITE_ONLY') {
+    args.push('--tools', 'write', '--system-prompt', PI_WRITE_ONLY_SYSTEM_PROMPT);
+  }
   if (request.provider !== undefined && request.model !== undefined) args.push('--provider', request.provider, '--model', request.model);
 
   const forbidden = new Set(['--api-key', '--approve', '-a']);
