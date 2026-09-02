@@ -47,6 +47,7 @@ test('Pi conformance invocation is machine-readable, sessionless, shell-free sha
   assert.ok(plan.args.includes('--no-session'));
   assert.ok(plan.args.includes('--no-extensions'));
   assert.ok(plan.args.includes('--no-context-files'));
+  assert.ok(plan.args.includes('--no-approve'));
   assert.equal(plan.args[plan.args.indexOf('--provider') + 1], 'local-provider');
   assert.equal(plan.args[plan.args.indexOf('--model') + 1], 'model-id');
   assert.equal(plan.args.at(-1), 'make the bounded change');
@@ -57,6 +58,7 @@ test('Pi conformance invocation is machine-readable, sessionless, shell-free sha
   assert.equal(plan.environment.values.PI_CODING_AGENT_DIR, resolve('.pi-agent-dir'));
   assert.ok(!plan.args.includes('--api-key'));
   assert.ok(!plan.args.includes('--approve'));
+  assert.ok(!plan.args.includes('-a'));
 });
 
 test('Pi refuses ambient configuration, partial identity, read-only, and resume shaping', () => {
