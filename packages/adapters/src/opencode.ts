@@ -90,7 +90,7 @@ function buildOpenCodeInvocationCore(request: AdapterRunRequest, discovery: Adap
 
   const args: string[] = ['run', '--format', 'json', '--dir', request.cwd];
   if (request.provider !== undefined && request.model !== undefined) args.push('--model', `${request.provider}/${request.model}`);
-  args.push(request.prompt);
+  args.push('--', request.prompt);
 
   const forbidden = new Set(['--auto', '--yolo', '--dangerously-skip-permissions']);
   if (args.some((arg) => forbidden.has(arg))) throw new Error('dangerous OpenCode bypass flag generated');
@@ -136,7 +136,10 @@ export function parseOpenCodeJsonl(stdout: string): ParsedOpenCode {
     const value = event as Record<string, unknown>;
     const type = typeof value.type === 'string' ? value.type : '';
     if (typeof value.sessionID === 'string') {
-      if (sessionId !== null && sessionId !== value.sessionID) warnings.push('OpenCode stream changed sessionID');
+      if (sessionId !== null && sessionId !== value.sessionID) {
+        invalid = true;
+        warnings.push('OpenCode stream changed sessionID');
+      }
       sessionId = value.sessionID;
     }
     if (type === 'error') providerFailed = true;
