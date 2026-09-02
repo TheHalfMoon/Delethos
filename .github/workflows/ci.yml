@@ -711,3 +711,452 @@ jobs:
             process.exitCode = 1;
           });
           NODE
+
+  opencode-recovery-probe:
+    name: opencode recovery probe / ${{ matrix.os }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'TheHalfMoon/Delethos' && contains(github.event.head_commit.message, '[opencode-recovery-probe]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout canonical main
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm and Node 24
+        uses: pnpm/setup@v2
+        with:
+          version: 11.22.0
+          runtime: node@24
+          install: false
+
+      - name: Install repository dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Observe provider-free OpenCode recovery surface
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { createHash } = require('node:crypto');
+          const {
+            chmodSync,
+            existsSync,
+            mkdirSync,
+            mkdtempSync,
+            readFileSync,
+            readdirSync,
+            statSync,
+            writeFileSync,
+          } = require('node:fs');
+          const { tmpdir } = require('node:os');
+          const { basename, join, resolve } = require('node:path');
+          const { spawnSync } = require('node:child_process');
+
+          const workspace = resolve(process.env.GITHUB_WORKSPACE || process.cwd());
+          const probeRoot = mkdtempSync(join(resolve(process.env.RUNNER_TEMP || tmpdir()), 'delethos-opencode-recovery-'));
+          const target = `${process.platform}:${process.arch}`;
+          const releaseBase = 'https://github.com/anomalyco/opencode/releases/download/v1.18.26';
+          const targets = {
+            'linux:x64': {
+              platform: 'linux',
+              arch: 'x64',
+              asset: 'opencode-linux-x64.tar.gz',
+              sha256: '7c20c1ffa91bcca0ac903752260bcc36307dff656833baead2f5ef3b224b16c6',
+              executable: 'opencode',
+            },
+            'darwin:arm64': {
+              platform: 'macos',
+              arch: 'arm64',
+              asset: 'opencode-darwin-arm64.zip',
+              sha256: 'b05d383149a5a417140e8edebd83064142fa36e74fdfcd5f791919dcb12fd33a',
+              executable: 'opencode',
+            },
+            'win32:x64': {
+              platform: 'windows',
+              arch: 'x64',
+              asset: 'opencode-windows-x64.zip',
+              sha256: 'c7af81e288dff3cf4378c9f3509208ef8bf060d7109589fee2cd943845d87786',
+              executable: 'opencode.exe',
+            },
+          };
+          const selected = targets[target];
+          if (!selected) throw new Error(`unsupported hosted OpenCode recovery platform ${target}`);
+
+          function git(args) {
+            const result = spawnSync('git', args, {
+              cwd: workspace,
+              encoding: 'utf8',
+              shell: false,
+              timeout: 10_000,
+            });
+            if (result.status !== 0) throw new Error(`git ${args[0]} failed`);
+            return result.stdout.replace(/\r\n/g, '\n').trimEnd();
+          }
+
+          function snapshotRepository() {
+            return {
+              head: git(['rev-parse', 'HEAD']),
+              refs: git(['for-each-ref', '--format=%(refname) %(objectname)']),
+              status: git(['status', '--porcelain=v1', '--untracked-files=all']),
+            };
+          }
+
+          function repositoryChanged(before, after) {
+            return before.head !== after.head || before.refs !== after.refs || before.status !== after.status;
+          }
+
+          function findExactExecutable(root, filename) {
+            const matches = [];
+            const pending = [root];
+            while (pending.length > 0) {
+              const current = pending.pop();
+              for (const entry of readdirSync(current, { withFileTypes: true })) {
+                const path = join(current, entry.name);
+                if (entry.isDirectory()) pending.push(path);
+                else if (entry.isFile() && entry.name.toLowerCase() === filename.toLowerCase()) matches.push(path);
+              }
+            }
+            if (matches.length !== 1) {
+              throw Object.assign(new Error(`expected exactly one ${filename}; observed ${matches.length}`), { result: 'LAUNCH_FAILED' });
+            }
+            return matches[0];
+          }
+
+          async function downloadVerified(url, destination, expectedSha256) {
+            let response;
+            try {
+              response = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(90_000) });
+            } catch {
+              throw Object.assign(new Error('public OpenCode release download failed or timed out'), { result: 'INTEGRITY_FAILED' });
+            }
+            if (!response.ok) {
+              throw Object.assign(new Error(`public OpenCode release download returned HTTP ${response.status}`), { result: 'INTEGRITY_FAILED' });
+            }
+            let bytes;
+            try {
+              bytes = Buffer.from(await response.arrayBuffer());
+            } catch {
+              throw Object.assign(new Error('public OpenCode release body failed or timed out'), { result: 'INTEGRITY_FAILED' });
+            }
+            const observed = createHash('sha256').update(bytes).digest('hex');
+            if (observed !== expectedSha256) {
+              throw Object.assign(new Error('OpenCode release asset SHA-256 mismatch'), { result: 'INTEGRITY_FAILED' });
+            }
+            writeFileSync(destination, bytes, { flag: 'wx' });
+          }
+
+          function exactWindowsExtractionEnvironment(assetPath, extractRoot) {
+            const values = {
+              PATH: process.env.PATH ?? process.env.Path ?? '',
+              DELETHOS_ARCHIVE: assetPath,
+              DELETHOS_EXTRACT: extractRoot,
+            };
+            for (const key of ['SystemRoot', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP']) {
+              if (process.env[key] !== undefined) values[key] = process.env[key];
+            }
+            return values;
+          }
+
+          function extractVerifiedAsset(assetPath, extractRoot) {
+            mkdirSync(extractRoot, { recursive: false });
+            let extraction;
+            if (process.platform === 'win32') {
+              extraction = spawnSync(
+                'pwsh.exe',
+                [
+                  '-NoLogo',
+                  '-NoProfile',
+                  '-NonInteractive',
+                  '-Command',
+                  "$ErrorActionPreference='Stop'; Expand-Archive -LiteralPath $env:DELETHOS_ARCHIVE -DestinationPath $env:DELETHOS_EXTRACT -Force",
+                ],
+                {
+                  cwd: probeRoot,
+                  encoding: 'utf8',
+                  shell: false,
+                  timeout: 120_000,
+                  env: exactWindowsExtractionEnvironment(assetPath, extractRoot),
+                },
+              );
+            } else {
+              extraction = spawnSync('tar', ['-xf', assetPath, '-C', extractRoot], {
+                cwd: probeRoot,
+                encoding: 'utf8',
+                shell: false,
+                timeout: 120_000,
+              });
+            }
+            if (extraction.error || extraction.status !== 0) {
+              throw Object.assign(new Error('verified OpenCode release extraction failed'), { result: 'LAUNCH_FAILED' });
+            }
+          }
+
+          function boundedReason(error) {
+            const text = error instanceof Error ? error.message : String(error);
+            return text.replace(/[\r\n]+/g, ' ').slice(0, 240);
+          }
+
+          function containsPathFragment(root, fragment) {
+            if (!existsSync(root)) return false;
+            const pending = [root];
+            const needle = fragment.toLowerCase();
+            while (pending.length > 0) {
+              const current = pending.pop();
+              for (const entry of readdirSync(current, { withFileTypes: true })) {
+                const path = join(current, entry.name);
+                if (path.toLowerCase().includes(needle)) return true;
+                if (entry.isDirectory()) pending.push(path);
+              }
+            }
+            return false;
+          }
+
+          (async () => {
+            const { superviseProcess } = await import('./packages/runtime/src/process.ts');
+            const initialRepository = snapshotRepository();
+            const record = {
+              source: 'HOSTED_CLI_FEASIBILITY',
+              candidate_id: 'opencode',
+              candidate_version: '1.18.26',
+              platform: selected.platform,
+              arch: selected.arch,
+              observation_status: 'UNVERIFIED',
+              observation_result: 'OTHER_FAILURE',
+              failure_reason: null,
+              executable_present: false,
+              version_exact: false,
+              help_exit_code: null,
+              headless_run_surface_observed: 'UNVERIFIED',
+              machine_readable_json_surface_observed: 'UNVERIFIED',
+              cwd_control_surface_observed: 'UNVERIFIED',
+              composite_provider_model_surface_observed: 'UNVERIFIED',
+              permission_policy_surface_observed: 'UNVERIFIED',
+              configuration_isolation_surface_observed: 'UNVERIFIED',
+              project_config_disable_surface_observed: 'UNVERIFIED',
+              plugin_install_suppression_surface_observed: 'UNVERIFIED',
+              auto_update_disable_surface_observed: 'UNVERIFIED',
+              provider_request_made: false,
+              authentication_attempted: false,
+              secret_referenced: false,
+              repository_mutated: 'UNKNOWN',
+            };
+
+            const before = snapshotRepository();
+            try {
+              const candidateRoot = join(probeRoot, 'opencode');
+              const extractRoot = join(candidateRoot, 'extract');
+              const workRoot = join(candidateRoot, 'work');
+              const homeRoot = join(candidateRoot, 'home');
+              const configRoot = join(candidateRoot, 'config');
+              const dataRoot = join(candidateRoot, 'data');
+              const cacheRoot = join(candidateRoot, 'cache');
+              const stateRoot = join(candidateRoot, 'state');
+              const tempRoot = join(candidateRoot, 'tmp');
+              for (const directory of [candidateRoot, workRoot, homeRoot, configRoot, dataRoot, cacheRoot, stateRoot, tempRoot]) {
+                if (!existsSync(directory)) mkdirSync(directory, { recursive: false });
+              }
+
+              const assetPath = join(candidateRoot, basename(selected.asset));
+              await downloadVerified(`${releaseBase}/${selected.asset}`, assetPath, selected.sha256);
+              extractVerifiedAsset(assetPath, extractRoot);
+              const executable = findExactExecutable(extractRoot, selected.executable);
+              record.executable_present = true;
+              if (process.platform !== 'win32') chmodSync(executable, 0o755);
+              if (!statSync(executable).isFile()) {
+                throw Object.assign(new Error('resolved OpenCode executable is not a regular file'), { result: 'LAUNCH_FAILED' });
+              }
+
+              const configPath = join(configRoot, 'opencode.json');
+              writeFileSync(
+                configPath,
+                JSON.stringify({ autoupdate: false, permission: { '*': 'deny' } }, null, 2),
+                { flag: 'wx' },
+              );
+              writeFileSync(
+                join(workRoot, 'opencode.json'),
+                JSON.stringify({ autoupdate: true, permission: { '*': 'allow' } }, null, 2),
+                { flag: 'wx' },
+              );
+
+              const environment = {
+                PATH: process.env.PATH ?? process.env.Path ?? '',
+                CI: 'true',
+                NO_COLOR: '1',
+                TERM: 'dumb',
+                HOME: homeRoot,
+                TMP: tempRoot,
+                TEMP: tempRoot,
+                XDG_CONFIG_HOME: configRoot,
+                XDG_DATA_HOME: dataRoot,
+                XDG_CACHE_HOME: cacheRoot,
+                XDG_STATE_HOME: stateRoot,
+                OPENCODE_CONFIG_DIR: configRoot,
+                OPENCODE_DISABLE_PROJECT_CONFIG: '1',
+                OPENCODE_PURE: '1',
+                OPENCODE_DISABLE_AUTOUPDATE: '1',
+                OPENCODE_DISABLE_MODELS_FETCH: '1',
+                OPENCODE_DISABLE_PRUNE: '1',
+                OPENCODE_DISABLE_CLAUDE_CODE: '1',
+                OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: '1',
+                OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: '1',
+              };
+              if (process.platform === 'win32') {
+                for (const key of ['SystemRoot', 'WINDIR', 'COMSPEC', 'PATHEXT']) {
+                  if (process.env[key] !== undefined) environment[key] = process.env[key];
+                }
+                environment.USERPROFILE = homeRoot;
+                environment.APPDATA = join(homeRoot, 'AppData', 'Roaming');
+                environment.LOCALAPPDATA = join(homeRoot, 'AppData', 'Local');
+              }
+
+              const allowedArgv = new Set([
+                JSON.stringify(['--version']),
+                JSON.stringify(['--help']),
+                JSON.stringify(['run', '--help']),
+                JSON.stringify(['debug', 'config']),
+              ]);
+              const run = async (args) => {
+                if (!allowedArgv.has(JSON.stringify(args))) {
+                  throw Object.assign(new Error('unauthorized OpenCode recovery-probe argv'), { result: 'LAUNCH_FAILED' });
+                }
+                const supervised = superviseProcess({
+                  command: executable,
+                  args,
+                  cwd: workRoot,
+                  environment: { mode: 'EXACT', values: environment },
+                  timeoutMs: 15_000,
+                  terminationGraceMs: 1_000,
+                  outputLimitBytes: 65_536,
+                });
+                const result = await supervised.result;
+                if (result.cause === 'TIMED_OUT') {
+                  const status = result.cleanupStatus === 'SUCCEEDED' ? 'FAIL' : 'UNVERIFIED';
+                  throw Object.assign(new Error(`OpenCode observation timed out; cleanup=${result.cleanupStatus}`), { result: 'TIMEOUT', status });
+                }
+                if (result.cause !== 'EXITED') {
+                  throw Object.assign(new Error(`OpenCode observation ended with ${result.cause}; cleanup=${result.cleanupStatus}`), { result: 'LAUNCH_FAILED' });
+                }
+                return result;
+              };
+
+              const versionResult = await run(['--version']);
+              if (versionResult.exitCode !== 0) {
+                throw Object.assign(new Error(`OpenCode version observation exited ${versionResult.exitCode}`), { result: 'VERSION_MISMATCH' });
+              }
+              const versionText = `${versionResult.stdout}\n${versionResult.stderr}`;
+              if (!/(^|\D)1\.18\.26(\D|$)/.test(versionText)) {
+                throw Object.assign(new Error('exact OpenCode 1.18.26 version was not observed'), { result: 'VERSION_MISMATCH' });
+              }
+              record.version_exact = true;
+
+              const rootHelp = await run(['--help']);
+              record.help_exit_code = rootHelp.exitCode;
+              if (rootHelp.exitCode !== 0) {
+                throw Object.assign(new Error(`OpenCode root help exited ${rootHelp.exitCode}`), { result: 'LAUNCH_FAILED' });
+              }
+              const rootHelpText = `${rootHelp.stdout}\n${rootHelp.stderr}`;
+
+              const runHelp = await run(['run', '--help']);
+              if (runHelp.exitCode !== 0) {
+                throw Object.assign(new Error(`OpenCode run help exited ${runHelp.exitCode}`), { result: 'LAUNCH_FAILED' });
+              }
+              const runHelpText = `${runHelp.stdout}\n${runHelp.stderr}`;
+
+              const debugConfig = await run(['debug', 'config']);
+              if (debugConfig.exitCode !== 0) {
+                throw Object.assign(new Error(`OpenCode debug config exited ${debugConfig.exitCode}`), { result: 'LAUNCH_FAILED' });
+              }
+              let resolvedConfig;
+              try {
+                resolvedConfig = JSON.parse(debugConfig.stdout);
+              } catch {
+                throw Object.assign(new Error('OpenCode debug config did not emit valid JSON'), { result: 'UNSUPPORTED_SURFACE', status: 'FAIL' });
+              }
+
+              const binary = readFileSync(executable);
+              const hasLiteral = (value) => binary.includes(Buffer.from(value, 'utf8'));
+              const resolvedDeny = resolvedConfig?.permission?.['*'] === 'deny';
+              const resolvedNoUpdate = resolvedConfig?.autoupdate === false;
+
+              record.headless_run_surface_observed = /\brun\b/i.test(rootHelpText) && /run opencode with a message/i.test(runHelpText);
+              record.machine_readable_json_surface_observed = runHelpText.includes('--format') && /\bjson\b/i.test(runHelpText);
+              record.cwd_control_surface_observed = runHelpText.includes('--dir');
+              record.composite_provider_model_surface_observed = runHelpText.includes('--model') && /provider\/model/i.test(runHelpText);
+              record.permission_policy_surface_observed = resolvedDeny;
+              record.configuration_isolation_surface_observed = resolvedDeny && resolvedNoUpdate;
+              record.project_config_disable_surface_observed = resolvedDeny && resolvedNoUpdate && hasLiteral('OPENCODE_DISABLE_PROJECT_CONFIG');
+              const pluginRoots = [configRoot, dataRoot, cacheRoot, stateRoot, homeRoot, tempRoot, workRoot];
+              record.plugin_install_suppression_surface_observed =
+                hasLiteral('OPENCODE_PURE') && !pluginRoots.some((root) => containsPathFragment(root, 'node_modules'));
+              record.auto_update_disable_surface_observed = resolvedNoUpdate && hasLiteral('OPENCODE_DISABLE_AUTOUPDATE');
+
+              const required = [
+                'headless_run_surface_observed',
+                'machine_readable_json_surface_observed',
+                'cwd_control_surface_observed',
+                'composite_provider_model_surface_observed',
+                'permission_policy_surface_observed',
+                'configuration_isolation_surface_observed',
+                'project_config_disable_surface_observed',
+                'plugin_install_suppression_surface_observed',
+                'auto_update_disable_surface_observed',
+              ];
+              const unsupported = required.filter((key) => record[key] !== true);
+              if (unsupported.length > 0) {
+                throw Object.assign(
+                  new Error(`required OpenCode recovery surface not observed: ${unsupported.join(',')}`),
+                  { result: 'UNSUPPORTED_SURFACE', status: 'FAIL' },
+                );
+              }
+
+              const after = snapshotRepository();
+              record.repository_mutated = repositoryChanged(before, after);
+              if (record.repository_mutated) {
+                throw Object.assign(new Error('OpenCode observation changed repository HEAD, refs, or worktree state'), { result: 'OTHER_FAILURE', status: 'FAIL' });
+              }
+
+              record.observation_status = 'PASS';
+              record.observation_result = 'COMPLETED';
+              record.failure_reason = null;
+            } catch (error) {
+              const after = snapshotRepository();
+              record.repository_mutated = repositoryChanged(before, after);
+              record.observation_status =
+                (error && error.status === 'FAIL') || record.repository_mutated === true
+                  ? 'FAIL'
+                  : 'UNVERIFIED';
+              record.observation_result = error && typeof error.result === 'string' ? error.result : 'OTHER_FAILURE';
+              record.failure_reason = boundedReason(error);
+            }
+
+            console.log(JSON.stringify(record));
+
+            const finalRepository = snapshotRepository();
+            if (repositoryChanged(initialRepository, finalRepository)) {
+              console.log(JSON.stringify({
+                source: 'HOSTED_CLI_FEASIBILITY',
+                candidate_id: 'opencode',
+                candidate_version: '1.18.26',
+                platform: selected.platform,
+                arch: selected.arch,
+                observation_status: 'FAIL',
+                observation_result: 'OTHER_FAILURE',
+                failure_reason: 'overall OpenCode probe changed repository HEAD, refs, or worktree state',
+              }));
+              process.exitCode = 1;
+            } else if (record.observation_status !== 'PASS') {
+              process.exitCode = 1;
+            }
+          })().catch((error) => {
+            console.error(`OpenCode recovery probe harness failed: ${boundedReason(error)}`);
+            process.exitCode = 1;
+          });
+          NODE
