@@ -354,9 +354,7 @@ jobs:
           };
 
           const selected = targets[target];
-          if (!selected) {
-            throw new Error(`unsupported hosted recovery platform ${target}`);
-          }
+          if (!selected) throw new Error(`unsupported hosted recovery platform ${target}`);
 
           function git(args) {
             const result = spawnSync('git', args, {
@@ -421,15 +419,47 @@ jobs:
             writeFileSync(destination, bytes, { flag: 'wx' });
           }
 
+          function exactWindowsExtractionEnvironment(assetPath, extractRoot) {
+            const values = {
+              PATH: process.env.PATH ?? process.env.Path ?? '',
+              DELETHOS_ARCHIVE: assetPath,
+              DELETHOS_EXTRACT: extractRoot,
+            };
+            for (const key of ['SystemRoot', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP']) {
+              if (process.env[key] !== undefined) values[key] = process.env[key];
+            }
+            return values;
+          }
+
           function extractVerifiedAsset(assetPath, extractRoot) {
             mkdirSync(extractRoot, { recursive: false });
-            const command = process.platform === 'win32' ? 'tar.exe' : 'tar';
-            const extraction = spawnSync(command, ['-xf', assetPath, '-C', extractRoot], {
-              cwd: probeRoot,
-              encoding: 'utf8',
-              shell: false,
-              timeout: 120_000,
-            });
+            let extraction;
+            if (process.platform === 'win32') {
+              extraction = spawnSync(
+                'pwsh.exe',
+                [
+                  '-NoLogo',
+                  '-NoProfile',
+                  '-NonInteractive',
+                  '-Command',
+                  "$ErrorActionPreference='Stop'; Expand-Archive -LiteralPath $env:DELETHOS_ARCHIVE -DestinationPath $env:DELETHOS_EXTRACT -Force",
+                ],
+                {
+                  cwd: probeRoot,
+                  encoding: 'utf8',
+                  shell: false,
+                  timeout: 120_000,
+                  env: exactWindowsExtractionEnvironment(assetPath, extractRoot),
+                },
+              );
+            } else {
+              extraction = spawnSync('tar', ['-xf', assetPath, '-C', extractRoot], {
+                cwd: probeRoot,
+                encoding: 'utf8',
+                shell: false,
+                timeout: 120_000,
+              });
+            }
             if (extraction.error || extraction.status !== 0) {
               throw Object.assign(new Error('verified release extraction failed'), { result: 'LAUNCH_FAILED' });
             }
@@ -502,6 +532,18 @@ jobs:
               secret_referenced: false,
               repository_mutated: 'UNKNOWN',
             };
+          }
+
+          function unsupportedSurfaceKeys(record) {
+            const keys = [
+              'programmatic_surface_observed',
+              'machine_readable_surface_observed',
+              'permission_control_surface_observed',
+              'provider_model_identity_surface_observed',
+              'configuration_isolation_surface_observed',
+            ];
+            if (record.cwd_control_surface_observed !== 'NOT_APPLICABLE') keys.push('cwd_control_surface_observed');
+            return keys.filter((key) => record[key] !== true);
           }
 
           (async () => {
@@ -599,7 +641,6 @@ jobs:
                   return result;
                 };
 
-                // Exact version is deliberately the first candidate executable observation.
                 const versionResult = await run(definition.versionArgs);
                 if (versionResult.exitCode !== 0) {
                   throw Object.assign(new Error(`version observation exited ${versionResult.exitCode}`), { result: 'VERSION_MISMATCH' });
@@ -618,6 +659,14 @@ jobs:
                 }
                 const help = `${helpResult.stdout}\n${helpResult.stderr}`;
                 Object.assign(record, definition.detect(help));
+
+                const unsupported = unsupportedSurfaceKeys(record);
+                if (unsupported.length > 0) {
+                  throw Object.assign(
+                    new Error(`required automation surface not observed: ${unsupported.join(',')}`),
+                    { result: 'UNSUPPORTED_SURFACE', status: 'FAIL' },
+                  );
+                }
 
                 const after = snapshotRepository();
                 record.repository_mutated = repositoryChanged(before, after);
