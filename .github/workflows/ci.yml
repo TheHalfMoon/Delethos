@@ -48,6 +48,12 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Validate R181 provider prerequisite harness syntax
+        run: node --check scripts/recovery-provider-prereq.mjs
+
+      - name: Self-test R181 provider prerequisite safety shaping
+        run: node scripts/recovery-provider-prereq.mjs --self-test
+
       - name: Verify zero production dependencies
         run: pnpm check:runtime-deps
 
@@ -1160,3 +1166,35 @@ jobs:
             process.exitCode = 1;
           });
           NODE
+
+  recovery-provider-prereq:
+    name: recovery provider prerequisite / ${{ matrix.os }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'TheHalfMoon/Delethos' && contains(github.event.head_commit.message, '[provider-prereq]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout canonical main
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm and Node 24
+        uses: pnpm/setup@v2
+        with:
+          version: 11.22.0
+          runtime: node@24
+          install: false
+
+      - name: Install repository dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Execute bounded provider prerequisite
+        run: node scripts/recovery-provider-prereq.mjs
