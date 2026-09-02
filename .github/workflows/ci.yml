@@ -39,6 +39,9 @@ jobs:
           pnpm --version
           git --version
 
+      - name: Self-test R181 provider prerequisite without repository dependencies
+        run: node scripts/recovery-provider-prereq.mjs --self-test
+
       - name: Install from frozen lockfile
         run: pnpm install --frozen-lockfile
 
@@ -1192,9 +1195,6 @@ jobs:
           version: 11.22.0
           runtime: node@24
           install: false
-
-      - name: Install repository dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Execute bounded provider prerequisite
         run: node scripts/recovery-provider-prereq.mjs
