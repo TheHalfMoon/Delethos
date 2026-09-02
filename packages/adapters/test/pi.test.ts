@@ -95,7 +95,7 @@ test('Pi JSONL parser uses authoritative message_end identity and final text', (
   assert.equal(parsed.finalMessage, 'fixture ok');
 });
 
-test('Pi JSONL parser fails closed on malformed, provider-error, and incomplete streams', () => {
+test('Pi JSONL parser fails closed on malformed, provider-error, aborted, errorMessage, and incomplete streams', () => {
   assert.equal(parsePiJsonl('{bad').invalid, true);
   const failed = parsePiJsonl([
     JSON.stringify({ type: 'session', id: 's' }),
@@ -104,6 +104,22 @@ test('Pi JSONL parser fails closed on malformed, provider-error, and incomplete 
   ].join('\n'));
   assert.equal(failed.providerFailed, true);
   assert.ok(failed.warnings.length > 0);
+
+  const aborted = parsePiJsonl([
+    JSON.stringify({ type: 'session', id: 's-abort' }),
+    JSON.stringify({ type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'partial' }], provider: 'p', model: 'm', stopReason: 'aborted', errorMessage: 'cancelled upstream' } }),
+    JSON.stringify({ type: 'agent_end', messages: [] }),
+  ].join('\n'));
+  assert.equal(aborted.providerFailed, true);
+  assert.ok(aborted.warnings.some((warning) => warning.includes('aborted')));
+
+  const inconsistentError = parsePiJsonl([
+    JSON.stringify({ type: 'session', id: 's-error-message' }),
+    JSON.stringify({ type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'must not pass' }], provider: 'p', model: 'm', stopReason: 'stop', errorMessage: 'provider reported failure' } }),
+    JSON.stringify({ type: 'agent_end', messages: [] }),
+  ].join('\n'));
+  assert.equal(inconsistentError.providerFailed, true);
+
   const incomplete = parsePiJsonl(JSON.stringify({ type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'not enough' }], provider: 'p', model: 'm', stopReason: 'stop' } }));
   assert.equal(incomplete.agentEnded, false);
 });
