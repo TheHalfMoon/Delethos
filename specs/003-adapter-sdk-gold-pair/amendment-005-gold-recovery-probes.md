@@ -97,7 +97,7 @@ The job may run only when all of the following are true:
 8. no Codex provider/model request is made;
 9. the job does not write to the repository, create Git refs, upload an evidence artifact, publish a package, create a release, or call a repository mutation API;
 10. bounded output appears only in the trusted GitHub Actions job log;
-11. every unexpected network/auth/provider interaction, CLI launch failure, version mismatch, or unsupported automation surface is preserved as FAIL/UNVERIFIED and is never relabeled as PASS.
+11. every unexpected network/auth/provider interaction, CLI launch failure, version mismatch, timeout, process-tree cleanup failure, integrity failure, or unsupported automation surface is preserved as FAIL/UNVERIFIED and is never relabeled as PASS.
 
 ## Authorized candidate observations
 
@@ -118,13 +118,17 @@ windows/x64
 
 For each platform, the job may:
 
-1. materialize only the exact public release/package identified above from its official GitHub/npm distribution path;
-2. verify the exact version before any other executable observation;
-3. use an isolated temporary configuration/home directory;
-4. disable automatic update behavior where the CLI exposes such a control;
-5. execute only local, provider-free version/help/command-surface observations;
-6. inspect whether the help surface exposes the automation controls required for later conformance shaping;
-7. record bounded machine-readable facts in the job log.
+1. materialize only the exact public release/package identified above from its official GitHub/npm distribution path into a newly created, clean temporary directory that is not reused across candidates or runs;
+2. for npm-based Pi materialization, disable lifecycle scripts with `--ignore-scripts`, verify package integrity against the package-manager/registry integrity metadata before launching any package executable, and treat integrity absence or mismatch as FAIL/UNVERIFIED;
+3. verify the exact candidate version as the first executable observation; for Pi this must establish exactly `pi-coding-agent v0.84.4` before any help or command-surface observation;
+4. use an isolated temporary configuration/home directory;
+5. disable automatic update behavior where the CLI exposes such a control;
+6. execute only local, provider-free version/help/command-surface observations;
+7. inspect whether the help surface exposes the automation controls required for later conformance shaping;
+8. close child stdin immediately and enforce a hard per-command timeout of at most 15 seconds for every executable observation;
+9. when a timeout occurs, terminate the complete child-process tree on Linux, macOS, and Windows using the canonical process-supervision semantics where available; if complete tree termination cannot be established, record the observation as `UNVERIFIED` rather than PASS;
+10. record timeout as `observation_result = TIMEOUT` with `observation_status = FAIL` or `UNVERIFIED`, never PASS;
+11. bound captured stdout/stderr independently of the process-lifetime timeout and emit only the bounded machine-readable facts required below.
 
 For GitHub Copilot CLI, the bounded control observations may cover only local CLI help/version evidence for:
 
@@ -160,6 +164,9 @@ candidate_id
 candidate_version
 platform
 arch
+observation_status = PASS | FAIL | UNVERIFIED
+observation_result = COMPLETED | TIMEOUT | LAUNCH_FAILED | INTEGRITY_FAILED | VERSION_MISMATCH | UNSUPPORTED_SURFACE | OTHER_FAILURE
+failure_reason = null | <bounded reason>
 executable_present
 version_exact
 help_exit_code
@@ -168,11 +175,13 @@ machine_readable_surface_observed
 cwd_control_surface_observed
 permission_control_surface_observed
 provider_model_identity_surface_observed
-provider_request_made = false
-authentication_attempted = false
-secret_referenced = false
-repository_mutated = false
+provider_request_made = false | true | UNKNOWN
+authentication_attempted = false | true | UNKNOWN
+secret_referenced = false | true | UNKNOWN
+repository_mutated = false | true | UNKNOWN
 ```
+
+For `observation_status = PASS`, all four prohibited-action observation fields must be exactly `false`, `observation_result` must be `COMPLETED`, and `failure_reason` must be `null`. For `FAIL` or `UNVERIFIED`, the record must preserve any observed `true` value; if the implementation cannot establish a prohibited-action fact without violating the no-secret/no-auth boundary, that field must be `UNKNOWN`, never fabricated as `false`.
 
 A field that is not applicable to a candidate must be `NOT_APPLICABLE`, not fabricated as PASS.
 
