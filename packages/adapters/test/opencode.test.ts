@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
-import { buildOpenCodeConformanceInvocation, OPENCODE_DEFINITION, parseOpenCodeJsonl } from '../src/opencode.ts';
+import {
+  buildOpenCodeConformanceInvocation,
+  buildOpenCodeR181Config,
+  OPENCODE_DEFINITION,
+  OPENCODE_R181_MODEL_ID,
+  OPENCODE_R181_PROVIDER_ID,
+  parseOpenCodeJsonl,
+} from '../src/opencode.ts';
 import { makeConformanceRecord } from '../src/conformance.ts';
 
 const discovery = {
@@ -51,6 +58,33 @@ test('OpenCode recovery definition is selected but exposes no promoted capabilit
   assert.equal(OPENCODE_DEFINITION.commandName, 'opencode');
   assert.deepEqual(OPENCODE_DEFINITION.versionArgs, ['--version']);
   for (const status of Object.values(OPENCODE_DEFINITION.capabilities)) assert.equal(status, 'UNVERIFIED');
+});
+
+test('OpenCode R181 config is loopback-only, exact-model, default-deny, and exact-target write-only', () => {
+  const config = buildOpenCodeR181Config('http://127.0.0.1:12345/v1', 'delethos-r181-smoke.txt');
+  assert.equal(config.autoupdate, false);
+  const provider = config.provider[OPENCODE_R181_PROVIDER_ID];
+  assert.equal(provider.npm, '@ai-sdk/openai-compatible');
+  assert.equal(provider.options.baseURL, 'http://127.0.0.1:12345/v1');
+  assert.deepEqual(Object.keys(provider.models), [OPENCODE_R181_MODEL_ID]);
+  assert.equal(config.permission['*'], 'deny');
+  assert.deepEqual(config.permission.edit, {
+    '*': 'deny',
+    'delethos-r181-smoke.txt': 'allow',
+  });
+  assert.equal(config.permission.bash, 'deny');
+  assert.equal(config.permission.external_directory, 'deny');
+  assert.equal(config.permission.webfetch, 'deny');
+  assert.equal(config.permission.websearch, 'deny');
+  assert.equal(config.permission.task, 'deny');
+});
+
+test('OpenCode R181 config rejects non-loopback endpoints and non-exact fixture targets', () => {
+  assert.throws(() => buildOpenCodeR181Config('https://127.0.0.1:12345/v1', 'delethos-r181-smoke.txt'), /exact unauthenticated/);
+  assert.throws(() => buildOpenCodeR181Config('http://localhost:12345/v1', 'delethos-r181-smoke.txt'), /exact unauthenticated/);
+  assert.throws(() => buildOpenCodeR181Config('http://127.0.0.1:12345/v1/extra', 'delethos-r181-smoke.txt'), /exact unauthenticated/);
+  assert.throws(() => buildOpenCodeR181Config('http://127.0.0.1:12345/v1', '../escape.txt'), /exact relative fixture filename/);
+  assert.throws(() => buildOpenCodeR181Config('http://127.0.0.1:12345/v1', '*.txt'), /exact relative fixture filename/);
 });
 
 test('OpenCode conformance invocation uses exact run JSON cwd and composite provider/model without dangerous bypasses', () => {
