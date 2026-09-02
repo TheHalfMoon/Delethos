@@ -3,7 +3,7 @@
 **Status:** `NORMATIVE` iff this amendment is present on canonical `main` while Specification 003 is active.  
 **Evidence date:** 2026-09-02  
 **Task:** `D003-R180` only — shape and qualify the exact provider/runtime/model strategy required by Amendment 007 before any provider-backed Pi/OpenCode Gold qualification.  
-**Scope:** select an exact local/no-secret runtime and model strategy, define its provenance and isolation gates, define the machine-observation requirements for `D003-R181`, and preserve the full Specification 003 Gold matrix. This amendment does not execute inference, does not mark either replacement adapter `SUPPORTED` or `GOLD`, and does not authorize Specification 004.
+**Scope:** select an exact local/no-secret runtime and model strategy, define provenance and isolation gates, define the machine-observation requirements for `D003-R181`, and preserve the full Specification 003 Gold matrix. This amendment does not execute inference, does not mark either replacement adapter `SUPPORTED` or `GOLD`, and does not authorize Specification 004.
 
 ## Why this amendment exists
 
@@ -47,15 +47,15 @@ The selected runtime is `ggml-org/llama.cpp` at release `b10621`, targeting sour
 c1d0e7a004015f23bc0233470b747b596f29b264
 ```
 
-The exact source revision is MIT licensed. The runtime's server documentation at that revision establishes:
+The exact source revision is MIT licensed. Its server documentation establishes:
 
 - OpenAI-compatible chat-completion routes;
 - function/tool calling through the Jinja chat path;
 - native tool-call handling for Qwen 2.5 and Qwen 2.5 Coder model families;
 - explicit `--model`, `--alias`, `--host`, `--port`, `--api-key`, and `--jinja` surfaces;
-- default server authentication of none when no API key is configured;
+- no server authentication when no API key is configured;
 - loopback host support;
-- CPU-only operation through `--n-gpu-layers 0`.
+- CPU-only execution by setting zero GPU layers.
 
 Source references:
 
@@ -84,7 +84,7 @@ asset = llama-b10621-bin-win-cpu-x64.zip
 sha256 = 0e8b65e650e369f70f8307d890508886f171ef4fb00facccddd4a1b7ffdaca51
 ```
 
-The GitHub release currently reports `immutable = false`. Therefore the tag or filename alone is insufficient provenance. Qualification must fail closed unless the downloaded archive digest matches the exact value above and the extracted executable reports the expected `b10621`/source identity. Any changed upstream asset with a different digest requires a later canonical amendment rather than silent acceptance.
+The GitHub release reports `immutable = false`. Therefore a tag or filename alone is insufficient provenance. Qualification must fail closed unless the downloaded archive digest matches the exact value above and the extracted executable reports the expected release/source identity. Any changed upstream asset with a different digest requires a later canonical amendment rather than silent acceptance.
 
 ## Model provenance
 
@@ -112,7 +112,7 @@ Pinned file SHA-256:
 cc324af070c2ecbfd324a30884d2f951a7ff756aba85cb811a6ec436933bb046
 ```
 
-The Hugging Face file record reports approximately 1.12 GB and Apache-2.0 licensing for the repository. It also documents direct llama.cpp use and Pi configuration against a local OpenAI-compatible llama.cpp endpoint.
+The official Hugging Face repository reports Apache-2.0 licensing, a file size of approximately 1.12 GB, and direct llama.cpp local OpenAI-compatible serving instructions.
 
 Source reference:
 
@@ -132,7 +132,7 @@ windows-latest = x64 / 4 CPU / 16 GB RAM / 14 GB SSD
 macos-latest   = arm64 M1 / 3 CPU / 7 GB RAM / 14 GB SSD
 ```
 
-The selected ~1.12 GB Q4_K_M model plus the small CPU runtime archives is intentionally bounded for the lowest-memory required platform rather than selecting a larger local model by preference.
+The selected ~1.12 GB Q4_K_M model plus the CPU runtime archives is intentionally bounded for the lowest-memory required platform rather than selecting a larger local model by preference.
 
 This sizing argument is shaping evidence only. It does not prove that model loading, context allocation, tool use, or the two real CLIs will succeed. `D003-R181` must machine-observe those facts on all three platforms before any Gold execution proceeds.
 
@@ -159,7 +159,7 @@ https://docs.github.com/en/actions/reference/runners/github-hosted-runners
 --no-webui
 ```
 
-The exact selected API base URL is therefore:
+The exact selected API base URL is:
 
 ```text
 http://127.0.0.1:<ephemeral-loopback-port>/v1
@@ -176,7 +176,7 @@ The server must not be started with:
 --mcp-servers-json
 ```
 
-Delethos relies on Pi/OpenCode tool boundaries, not llama.cpp's experimental built-in tool executor. The model server itself receives model/tool schemas over the OpenAI-compatible API but receives no authority to access the repository filesystem.
+Delethos relies on Pi/OpenCode tool boundaries, not llama.cpp's experimental built-in tool executor. The model server may receive tool schemas over the OpenAI-compatible API but receives no direct repository filesystem or shell authority.
 
 The server must be reachable only over loopback. A wildcard/public bind such as `0.0.0.0` is outside this strategy.
 
@@ -186,11 +186,11 @@ The selected local provider requires no credential.
 
 This does **not** mean an unexecuted auth case is automatically PASS. `D003-R181` must machine-prove all of the following on each required platform:
 
-1. the server was launched without `--api-key` and without an API-key environment variable;
+1. the server was launched without `--api-key`, `--api-key-file`, or `LLAMA_API_KEY`;
 2. an anonymous `GET /v1/models` succeeds;
 3. an anonymous non-empty chat completion succeeds;
 4. no credential-bearing environment variable was read, created, injected, or persisted by the Delethos qualification path;
-5. the Pi literal placeholder required by Pi's local-provider availability model is non-secret and is not accepted by the server as an authentication requirement;
+5. the Pi literal placeholder required by Pi's local-provider availability model is non-secret and is not required by the server for authentication;
 6. OpenCode reaches the same endpoint without stored auth material.
 
 Only after those observations may the replacement-pair authentication case be represented as:
@@ -201,11 +201,11 @@ NOT_APPLICABLE_PROVEN_LOCAL_NOAUTH
 
 It must never be called credentialed success.
 
-## Pi 0.84.4 provider configuration
+## Pi 0.84.4 provider and tool posture
 
 Pi `v0.84.4` documents custom local OpenAI-compatible providers through an isolated `models.json` with `baseUrl`, `api`, a literal placeholder `apiKey`, and explicit model entries. Its documentation explicitly notes that local keyless servers may use a dummy value because Pi uses configured auth presence for model availability.
 
-The R181 isolated Pi provider must therefore use a strategy-specific configuration equivalent to:
+The R181 isolated Pi provider must use a strategy-specific configuration equivalent to:
 
 ```json
 {
@@ -241,17 +241,26 @@ The R181 isolated Pi provider must therefore use a strategy-specific configurati
 
 The literal placeholder is not a secret, vendor credential, account token, or paid-access key. It must not be sourced from a secret store or environment variable.
 
-Pi must remain in the Amendment 007 exact isolated environment posture, including its dedicated `PI_CODING_AGENT_DIR` and home isolation. Ambient user/project model configuration is prohibited.
+Pi must remain in the Amendment 007 exact isolation posture, including dedicated `PI_CODING_AGENT_DIR` and home roots plus the already-implemented `--no-session`, `--no-extensions`, `--no-skills`, `--no-prompt-templates`, `--no-themes`, `--no-context-files`, and `--no-approve` controls.
 
-Source reference:
+Pi `v0.84.4` also provides an exact `--tools <list>` allowlist. Therefore the R181 bounded write smoke must not expose the normal built-in tool set. Its conformance-only invocation must add exactly:
+
+```text
+--tools write
+```
+
+for the one-file creation case. No `bash`, `powershell`, `read`, `edit`, `grep`, `find`, `ls`, extension tool, custom tool, or network-capable extension may be enabled for that smoke. Later Gold cases may use a different case-specific allowlist only when the active case requires it; no broad tool posture is promoted by this prerequisite.
+
+Source references:
 
 ```text
 https://github.com/earendil-works/pi/blob/v0.84.4/packages/coding-agent/docs/models.md
+https://github.com/earendil-works/pi/blob/v0.84.4/packages/coding-agent/docs/usage.md
 ```
 
-## OpenCode 1.18.26 provider configuration
+## OpenCode 1.18.26 provider and permission posture
 
-OpenCode `v1.18.26` documents local OpenAI-compatible custom providers through `@ai-sdk/openai-compatible` and a `baseURL` without requiring a stored API key. The same version documents granular `permission` rules and explicitly distinguishes `allow`, `ask`, and `deny`.
+OpenCode `v1.18.26` documents local OpenAI-compatible custom providers through `@ai-sdk/openai-compatible` and a `baseURL` without requiring stored vendor credentials. The same version documents granular `permission` rules and explicitly distinguishes `allow`, `ask`, and `deny`.
 
 The R181 isolated OpenCode configuration must use a strategy-specific provider equivalent to:
 
@@ -275,7 +284,22 @@ The R181 isolated OpenCode configuration must use a strategy-specific provider e
 }
 ```
 
-R181 may add only the bounded permission rules needed for its temporary fixture worktree. It must not use:
+For the R181 one-file write smoke, the generated isolated OpenCode configuration must be default-deny for tool permissions and permit only the exact fixture-target write/edit path needed by the case. In semantic terms, the policy must be equivalent to:
+
+```text
+all unrelated permissions = deny
+edit/write/patch outside exact smoke target = deny
+exact smoke target edit/write/patch = allow
+bash = deny
+external_directory = deny
+webfetch = deny
+websearch = deny
+task/subagent = deny
+```
+
+The implementation must validate the exact `v1.18.26` permission syntax in deterministic tests before provider execution. It may not replace this restriction with prompt-only cooperation.
+
+R181 and later Gold runs must never use:
 
 ```text
 --auto
@@ -283,7 +307,7 @@ R181 may add only the bounded permission rules needed for its temporary fixture 
 --dangerously-skip-permissions
 ```
 
-and must explicitly deny or omit unrelated shell/network/external-directory authority. Later Gold read-only and write cases must use case-specific permission postures rather than treating one broad configuration as proof of both.
+Later Gold read-only and write cases must use case-specific permission postures rather than treating one broad configuration as proof of both.
 
 Source references:
 
@@ -362,11 +386,13 @@ pi_cli_version_exact_0_84_4
 pi_requested_identity_exact
 pi_observed_identity_exact
 pi_nonempty_completion
+pi_tool_allowlist_exact_write_only
 pi_bounded_tool_write_smoke
 opencode_cli_version_exact_1_18_26
 opencode_requested_identity_exact
 opencode_sanitized_export_identity_exact
 opencode_nonempty_completion
+opencode_permission_policy_exact_default_deny
 opencode_bounded_tool_write_smoke
 repository_fixture_only
 no_secret_referenced
@@ -383,7 +409,9 @@ windows/x64
 
 ### Bounded tool-write smoke
 
-For prerequisite feasibility only, each adapter may receive a deterministic instruction in a fresh disposable Git worktree to create one exact file with one exact content payload. Delethos must independently verify:
+For prerequisite feasibility only, each adapter may receive a deterministic instruction in a fresh disposable Git worktree to create one exact file with one exact content payload.
+
+Before launch, Delethos must independently verify the exact tool/permission restriction for that adapter. After launch, Delethos must independently verify:
 
 - the expected file exists with exact bytes;
 - no unexpected path changed;
@@ -391,7 +419,7 @@ For prerequisite feasibility only, each adapter may receive a deterministic inst
 - no commit, push, merge, publish, or release occurred;
 - the model generated a real provider response and a real agent tool action rather than a scripted fixture answer.
 
-This smoke proves only that the chosen local model/runtime can exercise the adapter's coding/tool path. It does not substitute for the complete R190/R200 Gold matrix.
+This smoke proves only that the chosen local model/runtime can exercise the adapter's tightly bounded coding/tool path. It does not substitute for the complete R190/R200 Gold matrix.
 
 ## D003-R181 implementation authority
 
@@ -423,10 +451,11 @@ A canonical-main workflow trigger may be added only after its implementation PR 
 
 - use `contents: read` only;
 - use no repository or vendor secrets;
-- install exact Pi/OpenCode versions from the already-canonical Amendment 007 baselines;
+- install exact Pi/OpenCode versions from the canonical Amendment 007 baselines;
 - download only the pinned runtime/model artifacts described above;
 - verify every digest before execution;
 - run only against generated temporary fixture repositories;
+- validate and record the exact Pi tool allowlist and OpenCode default-deny permission posture before provider launch;
 - emit bounded machine-readable records without raw prompts, transcripts, environment dumps, or hidden reasoning;
 - preserve failure/unavailability rather than retrying into an invented PASS;
 - kill the local model server and descendants after each job;
@@ -479,7 +508,9 @@ server requires unexpected auth
 model load failure
 non-empty completion failure
 tool-call incompatibility
+Pi tool allowlist wider than the active case
 Pi provider/model identity mismatch
+OpenCode permission posture wider than the active case
 OpenCode sanitized export identity unavailable or mismatched
 resource exhaustion on any required platform
 uncontrolled ambient configuration
@@ -518,8 +549,9 @@ This amendment does not authorize:
 - consuming paid provider quota;
 - exposing the local inference server beyond loopback;
 - enabling llama.cpp built-in filesystem/shell tools;
+- widening Pi tools beyond the active conformance case;
 - using OpenCode auto/yolo/dangerous approval bypass modes;
-- widening Pi/OpenCode permissions beyond the active fixture case;
+- widening OpenCode permissions beyond the active fixture case;
 - persisting raw provider transcripts or hidden reasoning as evidence;
 - representing either adapter as `SUPPORTED` or `GOLD`;
 - terminal Specification 003 closeout;
