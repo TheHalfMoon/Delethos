@@ -648,7 +648,10 @@ async function waitForExactSmokeThenStop(repo, running, timeoutMs = PI_TOOL_SMOK
   const smokePath = join(repo, SMOKE_FILE);
   const deadline = Date.now() + timeoutMs;
   let settled = null;
-  running.result.then((result) => { settled = result; });
+  running.result.then(
+    (result) => { settled = result; },
+    () => { /* the awaited result below reports the failure */ },
+  );
   while (Date.now() < deadline) {
     if (existsSync(smokePath)) {
       const stat = lstatSync(smokePath);
