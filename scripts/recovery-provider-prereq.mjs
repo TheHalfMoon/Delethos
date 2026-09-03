@@ -50,7 +50,11 @@ try {
     throw new Error(`R181 Amendment 010 patch failed: status=${applied.status ?? 'null'} error=${applied.error?.message ?? 'none'}`);
   }
 
-  let candidateSource = readFileSync(tempImplementation, 'utf8');
+  const patchedCheckoutSource = readFileSync(tempImplementation, 'utf8');
+  let candidateSource = patchedCheckoutSource.replace(/\r\n/g, '\n');
+  if (candidateSource.includes('\r')) {
+    throw new Error('R181 patched implementation contained unsupported carriage returns');
+  }
   if (gitBlobSha(candidateSource) !== EXPECTED_CANDIDATE_BLOB) {
     throw new Error('R181 Amendment 010 patched implementation failed exact blob verification');
   }
