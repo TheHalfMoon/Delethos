@@ -45,7 +45,7 @@ writeFileSync(tempImplementation, canonicalSource, { flag: 'wx' });
 writeFileSync(patchPath, gunzipSync(Buffer.from(PATCH_GZIP_BASE64, 'base64')), { flag: 'wx' });
 
 try {
-  const applied = spawnSync('git', ['apply', patchPath], { cwd: tempRoot, encoding: 'utf8', shell: false });
+  const applied = spawnSync('git', ['apply', '--no-index', patchPath], { cwd: tempRoot, encoding: 'utf8', shell: false });
   if (applied.error || applied.status !== 0) {
     throw new Error(`R181 Amendment 010 patch failed: status=${applied.status ?? 'null'} error=${applied.error?.message ?? 'none'}`);
   }
