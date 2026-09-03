@@ -42,6 +42,10 @@ const OPENCODE_VERSION = '1.18.26';
 const SMOKE_FILE = 'delethos-r181-smoke.txt';
 const SMOKE_CONTENT = 'DELETHOS_R181_OK\n';
 const MAX_JSON_BYTES = 1024 * 1024;
+const RUNTIME_VERSION_TIMEOUT_MS = 120_000;
+const PI_TOOL_SMOKE_TIMEOUT_MS = 300_000;
+const PI_TOOL_POLL_MS = 20;
+const PI_TOOL_FLUSH_GRACE_MS = 25;
 
 if (OPENCODE_R181_PROVIDER_ID !== CANONICAL_PROVIDER || OPENCODE_R181_MODEL_ID !== CANONICAL_MODEL) {
   throw new Error('OpenCode R181 identity constants drifted from canonical Amendment 008');
@@ -165,6 +169,13 @@ function pathEnvironment(extra = {}) {
     }
   }
   return values;
+}
+
+function assertNoCredentialEnvironment(values, label) {
+  const prohibited = /(api[_-]?key|token|secret|password|credential|authorization)/i;
+  const keys = Object.keys(values);
+  const offenders = keys.filter((key) => prohibited.test(key));
+  if (offenders.length > 0) throw new Error(`${label} contains credential-shaped environment keys`);
 }
 
 function runSync(command, args, options = {}) {
@@ -368,7 +379,7 @@ async function waitForModels(baseURL, runningServer, timeoutMs = 180_000) {
         return JSON.parse(text);
       }
     } catch {
-      // The server is still loading. Readiness polling is bounded and never converts an exited server into PASS.
+      // bounded readiness polling
     }
   }
   throw new Error('llama-server did not become ready within the bounded startup window');
@@ -408,6 +419,12 @@ function createFixtureRepo(root, name) {
   return repo;
 }
 
+function verifyCleanFixture(repo, before) {
+  const after = snapshotRepository(repo);
+  if (!repositoryIdentityUnchanged(before, after)) throw new Error('adapter changed fixture HEAD, refs, remotes, local Git config, or hooks');
+  if (after.status !== '') throw new Error(`unexpected clean fixture worktree status: ${after.status}`);
+}
+
 async function verifyExactSmoke(repo, before) {
   const after = snapshotRepository(repo);
   if (!repositoryIdentityUnchanged(before, after)) throw new Error('adapter changed fixture HEAD, refs, remotes, local Git config, or hooks');
@@ -436,6 +453,7 @@ function piEnvironment(root) {
     values.APPDATA = join(home, 'AppData', 'Roaming');
     values.LOCALAPPDATA = join(home, 'AppData', 'Local');
   }
+  assertNoCredentialEnvironment(values, 'Pi environment');
   return { values, config };
 }
 
@@ -468,7 +486,58 @@ function openCodeEnvironment(root) {
     values.APPDATA = join(home, 'AppData', 'Roaming');
     values.LOCALAPPDATA = join(home, 'AppData', 'Local');
   }
+  assertNoCredentialEnvironment(values, 'OpenCode environment');
   return { values, config };
+}
+
+function buildPiR181Models(baseURL, forceFirstTool) {
+  const model = {
+    id: CANONICAL_MODEL,
+    name: 'Delethos local Qwen2.5 Coder 1.5B Q4_K_M',
+    reasoning: false,
+    input: ['text'],
+    contextWindow: 16384,
+    maxTokens: 2048,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  };
+  if (forceFirstTool) model.samplingParams = { tool_choice: 'required' };
+  return {
+    providers: {
+      [CANONICAL_PROVIDER]: {
+        baseUrl: baseURL,
+        api: 'openai-completions',
+        apiKey: 'delethos-local-no-secret',
+        authHeader: false,
+        compat: { supportsDeveloperRole: false, supportsReasoningEffort: false },
+        models: [model],
+      },
+    },
+  };
+}
+
+function exactPiConfig(config, baseURL, forceFirstTool) {
+  const provider = config?.providers?.[CANONICAL_PROVIDER];
+  const models = provider?.models;
+  if (!Array.isArray(models) || models.length !== 1) return false;
+  const model = models[0];
+  const sampling = model?.samplingParams;
+  const exactSampling = forceFirstTool
+    ? sampling?.tool_choice === 'required' && Object.keys(sampling).length === 1
+    : sampling === undefined;
+  return provider?.baseUrl === baseURL
+    && provider?.api === 'openai-completions'
+    && provider?.apiKey === 'delethos-local-no-secret'
+    && provider?.authHeader === false
+    && provider?.compat?.supportsDeveloperRole === false
+    && provider?.compat?.supportsReasoningEffort === false
+    && model?.id === CANONICAL_MODEL
+    && model?.reasoning === false
+    && Array.isArray(model?.input)
+    && model.input.length === 1
+    && model.input[0] === 'text'
+    && model?.contextWindow === 16384
+    && model?.maxTokens === 2048
+    && exactSampling;
 }
 
 function exactOpenCodePolicy(config, baseURL) {
@@ -503,15 +572,149 @@ function extractOpenCodeIdentity(exportValue, sessionID) {
   return { providerID: CANONICAL_PROVIDER, modelID: CANONICAL_MODEL, assistantMessages: assistant.length };
 }
 
+function parsePiToolEvidence(stdout) {
+  const starts = [];
+  const ends = [];
+  const assistantIdentities = [];
+  let invalid = false;
+  for (const line of stdout.split(/\r?\n/).filter((value) => value.trim() !== '')) {
+    let event;
+    try { event = JSON.parse(line); } catch {
+      invalid = true;
+      continue;
+    }
+    if (!event || typeof event !== 'object' || Array.isArray(event)) {
+      invalid = true;
+      continue;
+    }
+    if (event.type === 'tool_execution_start') {
+      starts.push({
+        id: typeof event.toolCallId === 'string' ? event.toolCallId : null,
+        name: typeof event.toolName === 'string' ? event.toolName : null,
+      });
+    }
+    if (event.type === 'tool_execution_end') {
+      ends.push({
+        id: typeof event.toolCallId === 'string' ? event.toolCallId : null,
+        name: typeof event.toolName === 'string' ? event.toolName : null,
+        isError: event.isError === true,
+      });
+    }
+    if (event.type === 'message_end' && event.message?.role === 'assistant') {
+      assistantIdentities.push({
+        provider: typeof event.message.provider === 'string' ? event.message.provider : null,
+        model: typeof event.message.model === 'string' ? event.message.model : null,
+      });
+    }
+  }
+  return { invalid, starts, ends, assistantIdentities };
+}
+
+function requireExactPiWriteEvidence(stdout) {
+  const evidence = parsePiToolEvidence(stdout);
+  if (evidence.invalid) throw new Error('Pi write-smoke JSONL contained malformed events');
+  if (evidence.starts.length !== 1 || evidence.ends.length !== 1) {
+    throw new Error(`Pi write smoke required exactly one tool execution; observed starts=${evidence.starts.length} ends=${evidence.ends.length}`);
+  }
+  const start = evidence.starts[0];
+  const end = evidence.ends[0];
+  if (!start.id || !end.id || start.id !== end.id) throw new Error('Pi write-smoke tool call id did not match');
+  if (start.name !== 'write' || end.name !== 'write') throw new Error('Pi write smoke executed a non-write tool');
+  if (end.isError) throw new Error('Pi write tool execution ended with an error');
+  if (evidence.assistantIdentities.length === 0) throw new Error('Pi write smoke exposed no assistant provider/model identity');
+  if (evidence.assistantIdentities.some((identity) => identity.provider !== CANONICAL_PROVIDER || identity.model !== CANONICAL_MODEL)) {
+    throw new Error('Pi write-smoke observed provider/model identity drifted');
+  }
+  return evidence;
+}
+
+function supervisePiPlan(plan) {
+  if (!plan.executablePath || plan.args.some((value) => typeof value !== 'string' || value.includes('\0'))) {
+    throw new TypeError('invalid Pi conformance invocation plan');
+  }
+  return superviseProcess({
+    command: plan.executablePath,
+    args: plan.args,
+    cwd: plan.cwd,
+    environment: plan.environment,
+    timeoutMs: plan.timeoutMs,
+    stallMs: plan.stallMs,
+    terminationGraceMs: plan.terminationGraceMs,
+    outputLimitBytes: plan.outputLimitBytes,
+  });
+}
+
+async function waitForExactSmokeThenStop(repo, running, timeoutMs = PI_TOOL_SMOKE_TIMEOUT_MS) {
+  const smokePath = join(repo, SMOKE_FILE);
+  const deadline = Date.now() + timeoutMs;
+  let settled = null;
+  running.result.then((result) => { settled = result; });
+  while (Date.now() < deadline) {
+    if (existsSync(smokePath)) {
+      const stat = lstatSync(smokePath);
+      if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Pi smoke target became a non-regular file');
+      try {
+        const content = await readFile(smokePath, 'utf8');
+        if (content === SMOKE_CONTENT) {
+          await new Promise((resolveValue) => setTimeout(resolveValue, PI_TOOL_FLUSH_GRACE_MS));
+          if (settled === null) running.cancel();
+          return await running.result;
+        }
+      } catch {
+        // The write may still be in progress. Continue bounded polling.
+      }
+    }
+    if (settled !== null) return settled;
+    await new Promise((resolveValue) => setTimeout(resolveValue, PI_TOOL_POLL_MS));
+  }
+  if (settled === null) running.cancel();
+  const result = await running.result;
+  throw new Error(`Pi write smoke did not produce exact file before deadline: cause=${result.cause} exit=${result.exitCode ?? 'null'}`);
+}
+
+function validateForcedSmokeProcess(result) {
+  if (result.outputTruncated) throw new Error('Pi write-smoke output was truncated');
+  if (result.cause === 'CANCELLED') {
+    if (result.cleanupStatus !== 'SUCCEEDED') throw new Error(`Pi write-smoke cancellation cleanup failed: ${result.cleanupStatus}`);
+    return;
+  }
+  if (result.cause === 'EXITED' && result.exitCode === 0) return;
+  throw new Error(`Pi write-smoke process ended unexpectedly: cause=${result.cause} exit=${result.exitCode ?? 'null'} cleanup=${result.cleanupStatus}`);
+}
+
 async function selfTest() {
   const selected = exactPlatform();
   for (const digest of [selected.runtimeSha256, selected.piSha256, selected.opencodeSha256, MODEL_SHA256]) {
     if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('pinned SHA-256 format is invalid');
   }
-  if (!/^[0-9a-f]{40}$/.test(RUNTIME_COMMIT) || !/^[0-9a-f]{40}$/.test(MODEL_REVISION)) throw new Error('pinned revision format is invalid');
+  if (!/^[0-9a-f]{40}$/.test(RUNTIME_COMMIT) || !/^[0-9a-f]{40}$/.test(MODEL_REVISION)) {
+    throw new Error('pinned revision format is invalid');
+  }
+
   const baseURL = 'http://127.0.0.1:12345/v1';
-  const config = buildOpenCodeR181Config(baseURL, SMOKE_FILE);
-  if (!exactOpenCodePolicy(config, baseURL)) throw new Error('OpenCode R181 policy self-test failed');
+  const ordinaryPiConfig = buildPiR181Models(baseURL, false);
+  const forcedPiConfig = buildPiR181Models(baseURL, true);
+  if (!exactPiConfig(ordinaryPiConfig, baseURL, false)) throw new Error('Pi ordinary R181 config self-test failed');
+  if (!exactPiConfig(forcedPiConfig, baseURL, true)) throw new Error('Pi forced-tool R181 config self-test failed');
+  const openCodeConfig = buildOpenCodeR181Config(baseURL, SMOKE_FILE);
+  if (!exactOpenCodePolicy(openCodeConfig, baseURL)) throw new Error('OpenCode R181 policy self-test failed');
+
+  const syntheticWrite = [
+    JSON.stringify({ type: 'message_end', message: { role: 'assistant', provider: CANONICAL_PROVIDER, model: CANONICAL_MODEL, content: [{ type: 'toolCall', name: 'write' }] } }),
+    JSON.stringify({ type: 'tool_execution_start', toolCallId: 'call-1', toolName: 'write', args: { path: SMOKE_FILE } }),
+    JSON.stringify({ type: 'tool_execution_end', toolCallId: 'call-1', toolName: 'write', result: {}, isError: false }),
+  ].join('\n');
+  requireExactPiWriteEvidence(syntheticWrite);
+  for (const invalid of [
+    syntheticWrite.replace('"write","args"', '"read","args"'),
+    `${syntheticWrite}\n${JSON.stringify({ type: 'tool_execution_start', toolCallId: 'call-2', toolName: 'write', args: {} })}`,
+    syntheticWrite.replace('"isError":false', '"isError":true'),
+  ]) {
+    let rejected = false;
+    try { requireExactPiWriteEvidence(invalid); } catch { rejected = true; }
+    if (!rejected) throw new Error('Pi tool-evidence fail-closed self-test failed');
+  }
+
   const temp = mkdtempSync(join(tmpdir(), 'delethos-r181-selftest-'));
   try {
     const envRoot = join(temp, 'pi');
@@ -519,7 +722,8 @@ async function selfTest() {
     const env = piEnvironment(envRoot);
     const fakeExecutable = join(temp, process.platform === 'win32' ? 'pi-fixture.exe' : 'pi-fixture');
     writeFileSync(fakeExecutable, '', { flag: 'wx' });
-    const plan = buildPiConformanceInvocation({
+
+    const baseRequest = {
       adapterId: 'pi-coding-agent',
       cwd: temp,
       prompt: 'self-test',
@@ -527,13 +731,21 @@ async function selfTest() {
       environmentPolicy: { mode: 'EXACT', values: env.values },
       provider: CANONICAL_PROVIDER,
       model: CANONICAL_MODEL,
-      prerequisiteToolMode: 'WRITE_ONLY',
-    }, {
+    };
+    const discovery = {
       adapterId: 'pi-coding-agent', state: 'DISCOVERED', executablePath: fakeExecutable,
       cliVersion: `pi-coding-agent v${PI_VERSION}`, detail: null,
-    });
-    const toolIndexes = plan.args.flatMap((value, index) => value === '--tools' ? [index] : []);
-    if (toolIndexes.length !== 1 || plan.args[toolIndexes[0] + 1] !== 'write') throw new Error('Pi R181 tool allowlist self-test failed');
+    };
+    const noToolsPlan = buildPiConformanceInvocation({ ...baseRequest, prerequisiteToolMode: 'NO_TOOLS' }, discovery);
+    if (noToolsPlan.args.filter((value) => value === '--no-tools').length !== 1 || noToolsPlan.args.includes('--tools')) {
+      throw new Error('Pi R181 no-tools self-test failed');
+    }
+    const writePlan = buildPiConformanceInvocation({ ...baseRequest, prerequisiteToolMode: 'WRITE_ONLY' }, discovery);
+    const toolIndexes = writePlan.args.flatMap((value, index) => value === '--tools' ? [index] : []);
+    if (toolIndexes.length !== 1 || writePlan.args[toolIndexes[0] + 1] !== 'write') throw new Error('Pi R181 write allowlist self-test failed');
+    if (writePlan.args.some((value) => ['bash', 'powershell', 'read', 'edit', 'grep', 'find', 'ls'].includes(value))) {
+      throw new Error('Pi R181 write allowlist widened in self-test');
+    }
 
     const hookRepo = createFixtureRepo(temp, 'hook-integrity-fixture');
     const hookBefore = snapshotRepository(hookRepo);
@@ -562,7 +774,16 @@ async function selfTest() {
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
-  console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_SELF_TEST', platform: selected.platform, arch: selected.arch, outcome: 'PASS' }));
+
+  console.log(JSON.stringify({
+    source: 'DETERMINISTIC_R181_SELF_TEST',
+    platform: selected.platform,
+    arch: selected.arch,
+    outcome: 'PASS',
+    pi_max_tokens: 2048,
+    forced_tool_choice: 'required',
+    runtime_version_timeout_ms: RUNTIME_VERSION_TIMEOUT_MS,
+  }));
 }
 
 async function main() {
@@ -582,7 +803,9 @@ async function main() {
     if (canonicalBefore.status !== '') throw new Error('canonical checkout must start clean');
 
     const tag = await fetchJson(`https://api.github.com/repos/ggml-org/llama.cpp/git/ref/tags/${RUNTIME_RELEASE}`);
-    if (tag?.object?.type !== 'commit' || tag?.object?.sha !== RUNTIME_COMMIT) throw new Error('runtime tag did not resolve directly to the pinned commit');
+    if (tag?.object?.type !== 'commit' || tag?.object?.sha !== RUNTIME_COMMIT) {
+      throw new Error('runtime tag did not resolve directly to the pinned commit');
+    }
     mark(record, 'runtime_tag_commit_exact');
 
     const release = await fetchJson(`https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/${RUNTIME_RELEASE}`);
@@ -610,7 +833,16 @@ async function main() {
     if (!statSync(serverExecutable).isFile()) throw new Error('runtime executable is not a regular file');
     mark(record, 'runtime_executable_contained_unique');
 
-    const version = await runBounded(serverExecutable, ['--version'], dirname(serverExecutable), pathEnvironment(), 30_000, 64 * 1024);
+    const versionEnvironment = pathEnvironment();
+    assertNoCredentialEnvironment(versionEnvironment, 'runtime version environment');
+    const version = await runBounded(
+      serverExecutable,
+      ['--version'],
+      dirname(serverExecutable),
+      versionEnvironment,
+      RUNTIME_VERSION_TIMEOUT_MS,
+      64 * 1024,
+    );
     const versionText = `${version.stdout}\n${version.stderr}`;
     const identityMatch = versionText.match(/version:\s*[^\r\n]*\(build\s+(\d+),\s*commit\s+([0-9a-fA-F]{7,40})\)/);
     if (!identityMatch || Number(identityMatch[1]) !== 10621 || !RUNTIME_COMMIT.startsWith(identityMatch[2].toLowerCase())) {
@@ -649,11 +881,13 @@ async function main() {
     if (serverArgs[serverArgs.indexOf('--host') + 1] !== '127.0.0.1') throw new Error('runtime server was not loopback-bound');
     mark(record, 'server_loopback_only');
 
+    const serverEnvironment = pathEnvironment({ NO_COLOR: '1' });
+    assertNoCredentialEnvironment(serverEnvironment, 'runtime server environment');
     server = superviseProcess({
       command: serverExecutable,
       args: serverArgs,
       cwd: dirname(serverExecutable),
-      environment: { mode: 'EXACT', values: pathEnvironment({ NO_COLOR: '1' }) },
+      environment: { mode: 'EXACT', values: serverEnvironment },
       timeoutMs: 30 * 60 * 1000,
       terminationGraceMs: 2_000,
       outputLimitBytes: 4 * 1024 * 1024,
@@ -674,80 +908,126 @@ async function main() {
     const piRoot = join(cliRoot, 'pi');
     mkdirSync(piRoot, { recursive: false });
     const piArchive = join(piRoot, selected.piAsset);
-    await downloadVerified(`https://github.com/earendil-works/pi/releases/download/v${PI_VERSION}/${selected.piAsset}`, piArchive, selected.piSha256, 300_000);
+    await downloadVerified(
+      `https://github.com/earendil-works/pi/releases/download/v${PI_VERSION}/${selected.piAsset}`,
+      piArchive,
+      selected.piSha256,
+      300_000,
+    );
     const piExtract = join(piRoot, 'extract');
     extractArchive(piArchive, piExtract);
     const piExecutable = findUniqueContainedExecutable(piExtract, selected.piExecutable);
     if (process.platform !== 'win32') chmodSync(piExecutable, 0o755);
-    const piEnvRoot = join(piRoot, 'environment');
-    mkdirSync(piEnvRoot, { recursive: false });
-    const piEnv = piEnvironment(piEnvRoot);
-    const piVersion = await runBounded(piExecutable, ['--version'], piRoot, piEnv.values, 30_000, 64 * 1024);
-    if (!exactVersionObserved(`${piVersion.stdout}\n${piVersion.stderr}`, PI_VERSION)) throw new Error('Pi exact 0.84.4 version was not observed');
+
+    const piVersionEnvRoot = join(piRoot, 'version-environment');
+    mkdirSync(piVersionEnvRoot, { recursive: false });
+    const piVersionEnv = piEnvironment(piVersionEnvRoot);
+    const piVersion = await runBounded(piExecutable, ['--version'], piRoot, piVersionEnv.values, 60_000, 64 * 1024);
+    if (!exactVersionObserved(`${piVersion.stdout}\n${piVersion.stderr}`, PI_VERSION)) {
+      throw new Error('Pi exact 0.84.4 version was not observed');
+    }
     mark(record, 'pi_cli_version_exact_0_84_4');
 
-    const piModels = {
-      providers: {
-        [CANONICAL_PROVIDER]: {
-          baseUrl: baseURL,
-          api: 'openai-completions',
-          apiKey: 'delethos-local-no-secret',
-          authHeader: false,
-          compat: { supportsDeveloperRole: false, supportsReasoningEffort: false },
-          models: [{
-            id: CANONICAL_MODEL,
-            name: 'Delethos local Qwen2.5 Coder 1.5B Q4_K_M',
-            reasoning: false,
-            input: ['text'],
-            contextWindow: 16384,
-            maxTokens: 1024,
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          }],
-        },
-      },
-    };
-    writeFileSync(join(piEnv.config, 'models.json'), `${JSON.stringify(piModels, null, 2)}\n`, { flag: 'wx' });
-
-    const piRepo = createFixtureRepo(qualificationRoot, 'pi-fixture');
-    const piBefore = snapshotRepository(piRepo);
     const piDiscovery = {
       adapterId: 'pi-coding-agent', state: 'DISCOVERED', executablePath: piExecutable,
       cliVersion: `pi-coding-agent v${PI_VERSION}`, detail: null,
     };
-    const piRequest = {
+
+    const piCompletionEnvRoot = join(piRoot, 'completion-environment');
+    mkdirSync(piCompletionEnvRoot, { recursive: false });
+    const piCompletionEnv = piEnvironment(piCompletionEnvRoot);
+    const piCompletionConfig = buildPiR181Models(baseURL, false);
+    if (!exactPiConfig(piCompletionConfig, baseURL, false)) throw new Error('Pi completion provider config drifted from Amendment 008');
+    writeFileSync(join(piCompletionEnv.config, 'models.json'), `${JSON.stringify(piCompletionConfig, null, 2)}\n`, { flag: 'wx' });
+    const piCompletionRepo = createFixtureRepo(qualificationRoot, 'pi-completion-fixture');
+    const piCompletionBefore = snapshotRepository(piCompletionRepo);
+    const piCompletionRequest = {
       adapterId: 'pi-coding-agent',
-      cwd: piRepo,
-      prompt: `Use the write tool exactly once to create ${SMOKE_FILE} in the current working directory with the exact UTF-8 content DELETHOS_R181_OK followed by one newline. Do not modify any other file. Then reply with a short confirmation.`,
+      cwd: piCompletionRepo,
+      prompt: 'Reply with a short non-empty confirmation. Do not call any tool.',
       posture: 'WRITE',
-      environmentPolicy: { mode: 'EXACT', values: piEnv.values },
+      environmentPolicy: { mode: 'EXACT', values: piCompletionEnv.values },
       provider: CANONICAL_PROVIDER,
       model: CANONICAL_MODEL,
-      prerequisiteToolMode: 'WRITE_ONLY',
+      prerequisiteToolMode: 'NO_TOOLS',
       timeoutMs: 300_000,
       terminationGraceMs: 2_000,
       outputLimitBytes: 2 * 1024 * 1024,
     };
-    const piPlan = buildPiConformanceInvocation(piRequest, piDiscovery);
-    const toolIndexes = piPlan.args.flatMap((value, index) => value === '--tools' ? [index] : []);
-    if (toolIndexes.length !== 1 || piPlan.args[toolIndexes[0] + 1] !== 'write') throw new Error('Pi tool allowlist was not exactly write-only');
-    if (piPlan.args.some((value) => ['bash', 'powershell', 'read', 'edit', 'grep', 'find', 'ls'].includes(value))) throw new Error('Pi tool allowlist contained an unauthorized tool');
-    mark(record, 'pi_tool_allowlist_exact_write_only');
-    if (piPlan.requestedProvider !== CANONICAL_PROVIDER || piPlan.requestedModel !== CANONICAL_MODEL) throw new Error('Pi requested identity did not match the canonical strategy');
+    const completionPlan = buildPiConformanceInvocation(piCompletionRequest, piDiscovery);
+    if (completionPlan.args.filter((value) => value === '--no-tools').length !== 1 || completionPlan.args.includes('--tools')) {
+      throw new Error('Pi completion subcase was not exact no-tools');
+    }
+    if (completionPlan.requestedProvider !== CANONICAL_PROVIDER || completionPlan.requestedModel !== CANONICAL_MODEL) {
+      throw new Error('Pi requested identity did not match the canonical strategy');
+    }
     mark(record, 'pi_requested_identity_exact');
-    const piResult = await runPi(piRequest, piDiscovery).result;
-    if (piResult.status !== 'COMPLETED') throw new Error(`Pi provider run did not complete: ${piResult.status}`);
-    if (piResult.identity.requestedProvider !== CANONICAL_PROVIDER || piResult.identity.requestedModel !== CANONICAL_MODEL) throw new Error('Pi result requested identity drifted');
-    if (piResult.identity.observedProvider !== CANONICAL_PROVIDER || piResult.identity.observedModel !== CANONICAL_MODEL) throw new Error('Pi observed provider/model identity did not match');
+
+    const piCompletionResult = await runPi(piCompletionRequest, piDiscovery).result;
+    if (piCompletionResult.status !== 'COMPLETED') throw new Error(`Pi provider completion did not complete: ${piCompletionResult.status}`);
+    if (piCompletionResult.identity.requestedProvider !== CANONICAL_PROVIDER || piCompletionResult.identity.requestedModel !== CANONICAL_MODEL) {
+      throw new Error('Pi completion requested identity drifted');
+    }
+    if (piCompletionResult.identity.observedProvider !== CANONICAL_PROVIDER || piCompletionResult.identity.observedModel !== CANONICAL_MODEL) {
+      throw new Error('Pi observed provider/model identity did not match');
+    }
     mark(record, 'pi_observed_identity_exact');
-    if (typeof piResult.finalMessage !== 'string' || piResult.finalMessage.trim() === '') throw new Error('Pi final completion was empty');
+    if (typeof piCompletionResult.finalMessage !== 'string' || piCompletionResult.finalMessage.trim() === '') {
+      throw new Error('Pi final completion was empty');
+    }
     mark(record, 'pi_nonempty_completion');
-    await verifyExactSmoke(piRepo, piBefore);
+    verifyCleanFixture(piCompletionRepo, piCompletionBefore);
+
+    const piSmokeEnvRoot = join(piRoot, 'smoke-environment');
+    mkdirSync(piSmokeEnvRoot, { recursive: false });
+    const piSmokeEnv = piEnvironment(piSmokeEnvRoot);
+    const piSmokeConfig = buildPiR181Models(baseURL, true);
+    if (!exactPiConfig(piSmokeConfig, baseURL, true)) throw new Error('Pi forced-tool provider config drifted from bounded R181 posture');
+    writeFileSync(join(piSmokeEnv.config, 'models.json'), `${JSON.stringify(piSmokeConfig, null, 2)}\n`, { flag: 'wx' });
+    const piSmokeRepo = createFixtureRepo(qualificationRoot, 'pi-smoke-fixture');
+    const piSmokeBefore = snapshotRepository(piSmokeRepo);
+    const piSmokeRequest = {
+      adapterId: 'pi-coding-agent',
+      cwd: piSmokeRepo,
+      prompt: `Create ${SMOKE_FILE} in the current working directory with the exact UTF-8 content DELETHOS_R181_OK followed by one newline. Do not modify any other file.`,
+      posture: 'WRITE',
+      environmentPolicy: { mode: 'EXACT', values: piSmokeEnv.values },
+      provider: CANONICAL_PROVIDER,
+      model: CANONICAL_MODEL,
+      prerequisiteToolMode: 'WRITE_ONLY',
+      timeoutMs: PI_TOOL_SMOKE_TIMEOUT_MS,
+      terminationGraceMs: 2_000,
+      outputLimitBytes: 2 * 1024 * 1024,
+    };
+    const piSmokePlan = buildPiConformanceInvocation(piSmokeRequest, piDiscovery);
+    const toolIndexes = piSmokePlan.args.flatMap((value, index) => value === '--tools' ? [index] : []);
+    if (toolIndexes.length !== 1 || piSmokePlan.args[toolIndexes[0] + 1] !== 'write') {
+      throw new Error('Pi tool allowlist was not exactly write-only');
+    }
+    if (piSmokePlan.args.some((value) => ['bash', 'powershell', 'read', 'edit', 'grep', 'find', 'ls'].includes(value))) {
+      throw new Error('Pi tool allowlist contained an unauthorized tool');
+    }
+    mark(record, 'pi_tool_allowlist_exact_write_only');
+    if (piSmokePlan.requestedProvider !== CANONICAL_PROVIDER || piSmokePlan.requestedModel !== CANONICAL_MODEL) {
+      throw new Error('Pi write-smoke requested identity drifted');
+    }
+
+    const piSmokeProcess = supervisePiPlan(piSmokePlan);
+    const piSmokeProcessResult = await waitForExactSmokeThenStop(piSmokeRepo, piSmokeProcess);
+    validateForcedSmokeProcess(piSmokeProcessResult);
+    requireExactPiWriteEvidence(piSmokeProcessResult.stdout);
+    await verifyExactSmoke(piSmokeRepo, piSmokeBefore);
     mark(record, 'pi_bounded_tool_write_smoke');
 
     const opencodeRoot = join(cliRoot, 'opencode');
     mkdirSync(opencodeRoot, { recursive: false });
     const opencodeArchive = join(opencodeRoot, selected.opencodeAsset);
-    await downloadVerified(`https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/${selected.opencodeAsset}`, opencodeArchive, selected.opencodeSha256, 300_000);
+    await downloadVerified(
+      `https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/${selected.opencodeAsset}`,
+      opencodeArchive,
+      selected.opencodeSha256,
+      300_000,
+    );
     const opencodeExtract = join(opencodeRoot, 'extract');
     extractArchive(opencodeArchive, opencodeExtract);
     const opencodeExecutable = findUniqueContainedExecutable(opencodeExtract, selected.opencodeExecutable);
@@ -755,8 +1035,10 @@ async function main() {
     const opencodeEnvRoot = join(opencodeRoot, 'environment');
     mkdirSync(opencodeEnvRoot, { recursive: false });
     const opencodeEnv = openCodeEnvironment(opencodeEnvRoot);
-    const opencodeVersion = await runBounded(opencodeExecutable, ['--version'], opencodeRoot, opencodeEnv.values, 30_000, 64 * 1024);
-    if (!exactVersionObserved(`${opencodeVersion.stdout}\n${opencodeVersion.stderr}`, OPENCODE_VERSION)) throw new Error('OpenCode exact 1.18.26 version was not observed');
+    const opencodeVersion = await runBounded(opencodeExecutable, ['--version'], opencodeRoot, opencodeEnv.values, 60_000, 64 * 1024);
+    if (!exactVersionObserved(`${opencodeVersion.stdout}\n${opencodeVersion.stderr}`, OPENCODE_VERSION)) {
+      throw new Error('OpenCode exact 1.18.26 version was not observed');
+    }
     mark(record, 'opencode_cli_version_exact_1_18_26');
 
     const opencodeConfig = buildOpenCodeR181Config(baseURL, SMOKE_FILE);
@@ -765,7 +1047,9 @@ async function main() {
     const debugConfig = await runBounded(opencodeExecutable, ['debug', 'config'], opencodeRepo, opencodeEnv.values, 60_000, 512 * 1024);
     let resolvedConfig;
     try { resolvedConfig = JSON.parse(debugConfig.stdout); } catch { throw new Error('OpenCode debug config was not valid JSON'); }
-    if (!exactOpenCodePolicy(resolvedConfig, baseURL)) throw new Error('OpenCode resolved permission/provider policy was not the exact default-deny R181 policy');
+    if (!exactOpenCodePolicy(resolvedConfig, baseURL)) {
+      throw new Error('OpenCode resolved permission/provider policy was not the exact default-deny R181 policy');
+    }
     mark(record, 'opencode_permission_policy_exact_default_deny');
 
     const opencodeBefore = snapshotRepository(opencodeRepo);
@@ -788,9 +1072,13 @@ async function main() {
     const opencodeRun = runOpenCode(opencodeRequest, opencodeDiscovery);
     const opencodeResult = await opencodeRun.result;
     if (opencodeResult.status !== 'COMPLETED') throw new Error(`OpenCode provider run did not complete: ${opencodeResult.status}`);
-    if (opencodeResult.identity.requestedProvider !== CANONICAL_PROVIDER || opencodeResult.identity.requestedModel !== CANONICAL_MODEL) throw new Error('OpenCode requested identity did not match the canonical strategy');
+    if (opencodeResult.identity.requestedProvider !== CANONICAL_PROVIDER || opencodeResult.identity.requestedModel !== CANONICAL_MODEL) {
+      throw new Error('OpenCode requested identity did not match the canonical strategy');
+    }
     mark(record, 'opencode_requested_identity_exact');
-    if (typeof opencodeResult.finalMessage !== 'string' || opencodeResult.finalMessage.trim() === '') throw new Error('OpenCode final completion was empty');
+    if (typeof opencodeResult.finalMessage !== 'string' || opencodeResult.finalMessage.trim() === '') {
+      throw new Error('OpenCode final completion was empty');
+    }
     mark(record, 'opencode_nonempty_completion');
     if (!opencodeResult.identity.sessionId) throw new Error('OpenCode run did not expose a session id for identity attestation');
     await verifyExactSmoke(opencodeRepo, opencodeBefore);
@@ -815,7 +1103,9 @@ async function main() {
     if (canonicalAfter.status !== '' || !repositoryIdentityUnchanged(canonicalBefore, canonicalAfter)) {
       throw new Error('R181 qualification changed canonical checkout HEAD, refs, remotes, local Git config, hooks, or worktree state');
     }
-    for (const root of [runtimeRoot, modelRoot, cliRoot, piRepo, opencodeRepo]) assertInside(qualificationRoot, root, 'R181 qualification path');
+    for (const root of [runtimeRoot, modelRoot, cliRoot, piCompletionRepo, piSmokeRepo, opencodeRepo]) {
+      assertInside(qualificationRoot, root, 'R181 qualification path');
+    }
     mark(record, 'repository_fixture_only');
     mark(record, 'no_secret_referenced');
     mark(record, 'no_hidden_commit_push_merge');
