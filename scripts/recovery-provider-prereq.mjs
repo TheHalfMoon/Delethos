@@ -27,7 +27,11 @@ function replaceOnce(source, before, after, label) {
   return source.slice(0, first) + after + source.slice(first + before.length);
 }
 
-const canonicalSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
+const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
+const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
+if (canonicalSource.includes('\r')) {
+  throw new Error('R181 canonical implementation contained unsupported carriage returns');
+}
 if (gitBlobSha(canonicalSource) !== EXPECTED_BASE_BLOB) {
   throw new Error('R181 canonical implementation blob drifted from Amendment 010 base');
 }
