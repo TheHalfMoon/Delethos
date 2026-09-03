@@ -176,6 +176,15 @@ If and only if the primary lifecycle pair is absent, retained JSONL must instead
 - that result must have the same `toolCallId`, `toolName = write`, and `isError = false`;
 - no second tool result and no result for another tool.
 
+Before cardinality or correspondence checks, every JSON record that structurally presents itself as durable Pi tool evidence must be validated fail-closed. In particular:
+
+- every assistant content item with `type = toolCall` must have a non-empty string `id`, a non-empty string `name`, and an object-valued arguments field when the exact Pi event shape carries arguments;
+- every candidate tool-result record must have a non-empty string `toolCallId`, a non-empty string `toolName`, and a boolean `isError` field;
+- a missing, null, empty, non-string, wrong-typed, or otherwise structurally invalid required field is a hard failure, not an ignorable record;
+- structural validation happens before counting tool calls/results and before matching ids/names.
+
+An implementation must not skip malformed candidate records and then accept a separate well-formed matching pair.
+
 The implementation must fail if lifecycle evidence is present but malformed, duplicated, mismatched, wrong-tool, or errored. It must not fall back to durable message/result evidence to excuse malformed primary evidence.
 
 The implementation must fail if both evidence forms are absent.
@@ -213,7 +222,9 @@ Before implementation can merge:
    - old REST metadata fact is not silently asserted;
    - Pi primary lifecycle proof accepts exactly one correct pair and rejects zero/multiple/mismatch/wrong-tool/error when lifecycle events are present;
    - Pi durable proof accepts exactly one matching assistant tool call + successful tool result only when lifecycle evidence is absent;
-   - durable proof rejects zero/multiple/mismatch/wrong-tool/error/malformed JSONL;
+   - every candidate durable tool-call/tool-result record is structurally validated before cardinality/correspondence checks;
+   - durable proof rejects candidate records with missing/null/empty/non-string ids or names, missing/non-boolean `isError`, wrong-typed required fields, zero/multiple/mismatch/wrong-tool/error, and malformed JSONL;
+   - malformed candidate durable records cannot be ignored in favor of a later well-formed pair;
    - cancellation remains FAIL;
    - natural-settlement and original outer timeout bounds remain unchanged from Amendment 010;
 6. a fresh independent substantive semantic review must cover the exact head;
