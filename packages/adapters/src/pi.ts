@@ -5,7 +5,7 @@ import { authFailureText, processEvidence, statusFromProcess, superviseInvocatio
 
 export const PI_DEFINITION: AdapterDefinition = {
   id: 'pi-coding-agent',
-  implementationVersion: 'spec003-recovery.pi.2',
+  implementationVersion: 'spec003-recovery.pi.3',
   tier: 'EXPERIMENTAL',
   candidateStatus: 'SELECTED_GOLD_CANDIDATE',
   commandName: 'pi',
@@ -18,11 +18,12 @@ export const PI_DEFINITION: AdapterDefinition = {
   },
 };
 
-type PiPrerequisiteToolMode = 'WRITE_ONLY';
+type PiPrerequisiteToolMode = 'NO_TOOLS' | 'WRITE_ONLY';
 
 const PI_WRITE_ONLY_SYSTEM_PROMPT = [
   'You are a deterministic file-writing agent.',
-  'For the current request, use the available write tool exactly once before producing any success text.',
+  'For the current request, your first assistant response must be exactly one call to the available write tool and no natural-language text.',
+  'Do not describe, simulate, or claim the write instead of calling the tool.',
   'Do not claim or imply that a file was written unless the write tool has returned success.',
   'After a successful write tool result, do not call any tool again; reply with a short confirmation.',
 ].join(' ');
@@ -75,8 +76,10 @@ function requirePiIsolation(request: AdapterRunRequest): void {
 function validatePrerequisiteToolMode(request: AdapterRunRequest, productDispatch: boolean, prerequisiteToolMode: unknown): PiPrerequisiteToolMode | undefined {
   if (prerequisiteToolMode === undefined) return undefined;
   if (productDispatch) throw new TypeError('Pi prerequisite tool mode is conformance-only');
-  if (prerequisiteToolMode !== 'WRITE_ONLY') throw new TypeError('Pi prerequisite tool mode must be WRITE_ONLY');
-  if (request.posture !== 'WRITE') throw new TypeError('Pi WRITE_ONLY prerequisite tool mode requires WRITE posture');
+  if (prerequisiteToolMode !== 'NO_TOOLS' && prerequisiteToolMode !== 'WRITE_ONLY') {
+    throw new TypeError('Pi prerequisite tool mode must be NO_TOOLS or WRITE_ONLY');
+  }
+  if (request.posture !== 'WRITE') throw new TypeError(`Pi ${prerequisiteToolMode} prerequisite tool mode requires WRITE posture`);
   return prerequisiteToolMode;
 }
 
@@ -108,7 +111,9 @@ function buildPiInvocationCore(
     '--no-context-files',
     '--no-approve',
   ];
-  if (boundedPrerequisiteToolMode === 'WRITE_ONLY') {
+  if (boundedPrerequisiteToolMode === 'NO_TOOLS') {
+    args.push('--no-tools');
+  } else if (boundedPrerequisiteToolMode === 'WRITE_ONLY') {
     args.push('--tools', 'write', '--system-prompt', PI_WRITE_ONLY_SYSTEM_PROMPT);
   }
   if (request.provider !== undefined && request.model !== undefined) args.push('--provider', request.provider, '--model', request.model);

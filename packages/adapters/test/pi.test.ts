@@ -36,7 +36,7 @@ test('Pi recovery definition is selected but exposes no promoted capabilities', 
   assert.equal(PI_DEFINITION.candidateStatus, 'SELECTED_GOLD_CANDIDATE');
   assert.equal(PI_DEFINITION.tier, 'EXPERIMENTAL');
   assert.equal(PI_DEFINITION.commandName, 'pi');
-  assert.equal(PI_DEFINITION.implementationVersion, 'spec003-recovery.pi.2');
+  assert.equal(PI_DEFINITION.implementationVersion, 'spec003-recovery.pi.3');
   assert.deepEqual(PI_DEFINITION.versionArgs, ['--version']);
   for (const status of Object.values(PI_DEFINITION.capabilities)) assert.equal(status, 'UNVERIFIED');
 });
@@ -61,7 +61,22 @@ test('Pi conformance invocation is machine-readable, sessionless, shell-free sha
   assert.ok(!plan.args.includes('--approve'));
   assert.ok(!plan.args.includes('-a'));
   assert.ok(!plan.args.includes('--tools'));
+  assert.ok(!plan.args.includes('--no-tools'));
   assert.ok(!plan.args.includes('--system-prompt'));
+});
+
+test('Pi R181 provider completion can disable all tools without widening authority', () => {
+  const plan = buildPiConformanceInvocation(request({
+    provider: 'delethos-local-llama',
+    model: 'delethos-qwen25-coder-1.5b-q4km',
+    prerequisiteToolMode: 'NO_TOOLS',
+  }), discovery);
+  assert.equal(plan.args.filter((value) => value === '--no-tools').length, 1);
+  assert.ok(!plan.args.includes('--tools'));
+  assert.ok(!plan.args.includes('--system-prompt'));
+  for (const forbiddenTool of ['bash', 'powershell', 'read', 'edit', 'grep', 'find', 'ls', 'write']) {
+    assert.ok(!plan.args.includes(forbiddenTool));
+  }
 });
 
 test('Pi R181 conformance shaping exposes exactly write with a bounded tool-use system prompt', () => {
@@ -76,7 +91,7 @@ test('Pi R181 conformance shaping exposes exactly write with a bounded tool-use 
   assert.equal(plan.args[toolIndexes[0]! + 1], 'write');
   assert.equal(systemPromptIndexes.length, 1);
   const systemPrompt = plan.args[systemPromptIndexes[0]! + 1];
-  assert.match(systemPrompt ?? '', /use the available write tool exactly once/i);
+  assert.match(systemPrompt ?? '', /first assistant response must be exactly one call/i);
   assert.match(systemPrompt ?? '', /unless the write tool has returned success/i);
   assert.match(systemPrompt ?? '', /do not call any tool again/i);
   for (const forbiddenTool of ['bash', 'powershell', 'read', 'edit', 'grep', 'find', 'ls']) {
@@ -88,9 +103,10 @@ test('Pi R181 conformance shaping exposes exactly write with a bounded tool-use 
   assert.equal(plan.requestedModel, 'delethos-qwen25-coder-1.5b-q4km');
 });
 
-test('Pi R181 tool shaping fails closed outside the exact conformance-only mode', () => {
-  assert.throws(() => buildPiConformanceInvocation(request({ prerequisiteToolMode: 'READ_WRITE' as never }), discovery), /must be WRITE_ONLY/);
+test('Pi R181 tool shaping fails closed outside the exact conformance-only modes', () => {
+  assert.throws(() => buildPiConformanceInvocation(request({ prerequisiteToolMode: 'READ_WRITE' as never }), discovery), /must be NO_TOOLS or WRITE_ONLY/);
   assert.throws(() => buildPiConformanceInvocation(request({ prerequisiteToolMode: 'WRITE_ONLY', posture: 'READ_ONLY' }), discovery), /requires WRITE posture|READ_ONLY is not authorized/);
+  assert.throws(() => buildPiConformanceInvocation(request({ prerequisiteToolMode: 'NO_TOOLS', posture: 'READ_ONLY' }), discovery), /requires WRITE posture|READ_ONLY is not authorized/);
 });
 
 test('Pi option terminator protects dash-prefixed prompt text', () => {
