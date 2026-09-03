@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const IMPLEMENTATION_URL = new URL('./recovery-provider-prereq-impl.mjs', import.meta.url);
 const IMPLEMENTATION_PATH = fileURLToPath(IMPLEMENTATION_URL);
 const FLUSH_DELAY_BEFORE_MS = 25;
-const FLUSH_DELAY_AFTER_MS = 250;
+const FLUSH_DELAY_AFTER_MS = 30_000;
 const FLUSH_CONSTANT = `const PI_TOOL_FLUSH_GRACE_MS = ${FLUSH_DELAY_BEFORE_MS};`;
 const FLUSH_USE = 'setTimeout(resolveValue, PI_TOOL_FLUSH_GRACE_MS)';
 
