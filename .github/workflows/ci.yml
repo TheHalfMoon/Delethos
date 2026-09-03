@@ -1172,7 +1172,7 @@ jobs:
 
   recovery-provider-prereq:
     name: recovery provider prerequisite / ${{ matrix.os }}
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'TheHalfMoon/Delethos' && contains(github.event.head_commit.message, '[provider-prereq]') }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'TheHalfMoon/Delethos' && startsWith(github.event.head_commit.message, '[provider-prereq]') }}
     strategy:
       fail-fast: false
       matrix:
