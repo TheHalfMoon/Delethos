@@ -103,7 +103,7 @@ test('common invocation preserves partial output and reports descendant-tree cle
   const supervised = superviseInvocation({
     adapterId: 'openai-codex-cli', executablePath: process.execPath,
     args: [fixture, 'spawn-child-then-stall'], cwd: resolve('.'), environment: { mode: 'INHERIT' },
-    timeoutMs: 180, terminationGraceMs: 80, outputLimitBytes: 16 * 1024,
+    timeoutMs: 1000, terminationGraceMs: 80, outputLimitBytes: 16 * 1024,
     requestedModel: null, requestedProvider: null, configurationPosture: 'NOT_APPLICABLE',
   });
   const result = await supervised.result;
