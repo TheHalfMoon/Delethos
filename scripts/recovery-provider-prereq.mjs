@@ -135,11 +135,182 @@ function applyAmendment014(source) {
   return source;
 }
 
+function applyAmendment015(source) {
+  source = replaceOnce(source, "import { fileURLToPath } from 'node:url';", "import { fileURLToPath, pathToFileURL } from 'node:url';", 'Amendment 015 temporary extension import');
+  source = replaceOnce(source, lines(["  'pi_tool_allowlist_exact_write_only',", "  'pi_bounded_tool_write_smoke',"]), lines(["  'pi_tool_allowlist_exact_write_only',", "  'pi_first_request_tool_choice_exact',", "  'pi_bounded_tool_write_smoke',"]), 'Amendment 015 required fact');
+
+  source = replaceOnce(source, 'function supervisePiPlan(plan) {', lines([
+    'function requireExactPiToolChoiceAudit(text) {',
+    "  if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > 16 * 1024) throw new Error('Pi first-request audit was invalid or oversized');",
+    "  const rows = text.split(/\\r?\\n/).filter((line) => line !== '');",
+    "  if (rows.length !== 2) throw new Error('Pi first-request audit required exactly two records');",
+    '  let first; let second;',
+    '  try { [first, second] = rows.map((line) => JSON.parse(line)); } catch { throw new Error(\'Pi first-request audit was not valid JSONL\'); }',
+    "  const plain = (value) => value && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;",
+    "  if (!plain(first) || !plain(second)) throw new Error('Pi first-request audit records were not plain objects');",
+    "  const exactKeys = (value, expected) => JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...expected].sort());",
+    "  if (!exactKeys(first, ['request','model','tool_count','tool_name','incoming_tool_choice','outgoing_tool_choice'])) throw new Error('Pi first-request audit record 1 shape drifted');",
+    "  if (!exactKeys(second, ['request','model','tool_count','tool_name','incoming_tool_choice','outgoing_tool_choice','follows_successful_write_result'])) throw new Error('Pi first-request audit record 2 shape drifted');",
+    "  if (first.request !== 1 || first.model !== CANONICAL_MODEL || first.tool_count !== 1 || first.tool_name !== 'write' || first.incoming_tool_choice !== 'absent' || first.outgoing_tool_choice !== 'required') throw new Error('Pi first-request audit record 1 values drifted');",
+    "  if (second.request !== 2 || second.model !== CANONICAL_MODEL || second.tool_count !== 1 || second.tool_name !== 'write' || second.incoming_tool_choice !== 'absent' || second.outgoing_tool_choice !== 'absent' || second.follows_successful_write_result !== true) throw new Error('Pi first-request audit record 2 values drifted');",
+    '  return [first, second];',
+    '}',
+    '',
+    'function buildPiFirstRequestToolChoiceExtensionSource(auditPath) {',
+    "  if (!isAbsolute(auditPath)) throw new Error('Pi request-shaping audit path must be absolute');",
+    '  const modelLiteral = JSON.stringify(CANONICAL_MODEL);',
+    '  const auditLiteral = JSON.stringify(auditPath);',
+    '  const successLiteral = JSON.stringify(`Successfully wrote to ${SMOKE_FILE}`);',
+    '  return [',
+    "    \"import { appendFileSync } from 'node:fs';\" ,",
+    "    'const CANONICAL_MODEL = ' + modelLiteral + ';',",
+    "    'const AUDIT_PATH = ' + auditLiteral + ';',",
+    "    'const SUCCESS_TEXT = ' + successLiteral + ';',",
+    "    \"const plain = (value) => value && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;\" ,",
+    "    \"const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);\" ,",
+    "    \"function exactWriteTool(payload) { if (!Array.isArray(payload.tools) || payload.tools.length !== 1) return false; const tool = payload.tools[0]; return plain(tool) && tool.type === 'function' && plain(tool.function) && tool.function.name === 'write'; }\" ,",
+    "    \"function noPriorToolContinuation(payload) { if (!Array.isArray(payload.messages)) return false; return payload.messages.every((message) => !plain(message) || (message.role !== 'tool' && !(message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length > 0))); }\" ,",
+    "    \"function followsSuccessfulWriteResult(payload) { if (!Array.isArray(payload.messages)) return false; const assistants = []; const results = []; payload.messages.forEach((message, index) => { if (!plain(message)) return; if (message.role === 'assistant' && Array.isArray(message.tool_calls)) { for (const call of message.tool_calls) { if (plain(call) && typeof call.id === 'string' && call.id.length > 0 && call.type === 'function' && plain(call.function) && call.function.name === 'write') assistants.push({ id: call.id, index }); else if (plain(call)) assistants.push({ id: null, index }); } } if (message.role === 'tool') results.push({ id: message.tool_call_id, content: message.content, index }); }); return assistants.length === 1 && results.length === 1 && assistants[0].id !== null && results[0].id === assistants[0].id && results[0].index > assistants[0].index && results[0].content === SUCCESS_TEXT; }\" ,",
+    "    \"function record(value) { appendFileSync(AUDIT_PATH, JSON.stringify(value) + '\\\\n', { encoding: 'utf8' }); }\" ,",
+    "    \"export default function (pi) { let requestIndex = 0; pi.on('before_provider_request', (event, ctx) => { requestIndex += 1; const payload = event.payload; const fail = () => { ctx.abort(); return payload; }; if (!plain(payload) || payload.model !== CANONICAL_MODEL || !exactWriteTool(payload) || own(payload, 'tool_choice')) return fail(); if (requestIndex === 1) { if (!noPriorToolContinuation(payload)) return fail(); record({ request: 1, model: CANONICAL_MODEL, tool_count: 1, tool_name: 'write', incoming_tool_choice: 'absent', outgoing_tool_choice: 'required' }); return { ...payload, tool_choice: 'required' }; } if (requestIndex === 2) { if (!followsSuccessfulWriteResult(payload)) return fail(); record({ request: 2, model: CANONICAL_MODEL, tool_count: 1, tool_name: 'write', incoming_tool_choice: 'absent', outgoing_tool_choice: 'absent', follows_successful_write_result: true }); return payload; } return fail(); }); }\" ,",
+    "  ].join('\\n') + '\\n';",
+    '}',
+    '',
+    'function shapePiSmokePlanWithExtension(plan, extensionPath) {',
+    "  if (!isAbsolute(extensionPath)) throw new Error('Pi request-shaping extension path must be absolute');",
+    "  const separators = plan.args.flatMap((value, index) => value === '--' ? [index] : []);",
+    "  if (separators.length !== 1) throw new Error('Pi write-smoke plan required exactly one prompt separator');",
+    "  if (plan.args.includes('--extension') || plan.args.includes('-e')) throw new Error('Pi write-smoke plan already contained an extension');",
+    '  const separator = separators[0];',
+    "  return { ...plan, args: [...plan.args.slice(0, separator), '--extension', extensionPath, ...plan.args.slice(separator)] };",
+    '}',
+    '',
+    'function supervisePiPlan(plan) {',
+  ]), 'Amendment 015 Pi request-shaping helpers');
+
+  source = replaceOnce(source,
+    "function noPriorToolContinuation(payload) { if (!Array.isArray(payload.messages)) return false; return payload.messages.every((message) => !plain(message) || (message.role !== 'tool' && !(message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length > 0))); }",
+    "function noPriorToolContinuation(payload) { if (!Array.isArray(payload.messages)) return false; for (const message of payload.messages) { if (!plain(message)) return false; if (message.role === 'tool') return false; if (message.role === 'assistant' && message.tool_calls !== undefined) { if (!Array.isArray(message.tool_calls)) return false; for (const call of message.tool_calls) if (!plain(call)) return false; if (message.tool_calls.length > 0) return false; } } return true; }",
+    'Amendment 015 reject malformed first-request messages');
+  source = replaceOnce(source,
+    "function followsSuccessfulWriteResult(payload) { if (!Array.isArray(payload.messages)) return false; const assistants = []; const results = []; payload.messages.forEach((message, index) => { if (!plain(message)) return; if (message.role === 'assistant' && Array.isArray(message.tool_calls)) { for (const call of message.tool_calls) { if (plain(call) && typeof call.id === 'string' && call.id.length > 0 && call.type === 'function' && plain(call.function) && call.function.name === 'write') assistants.push({ id: call.id, index }); else if (plain(call)) assistants.push({ id: null, index }); } } if (message.role === 'tool') results.push({ id: message.tool_call_id, content: message.content, index }); }); return assistants.length === 1 && results.length === 1 && assistants[0].id !== null && results[0].id === assistants[0].id && results[0].index > assistants[0].index && results[0].content === SUCCESS_TEXT; }",
+    "function followsSuccessfulWriteResult(payload) { if (!Array.isArray(payload.messages)) return false; const assistants = []; const results = []; for (let index = 0; index < payload.messages.length; index += 1) { const message = payload.messages[index]; if (!plain(message)) return false; if (message.role === 'assistant' && message.tool_calls !== undefined) { if (!Array.isArray(message.tool_calls)) return false; for (const call of message.tool_calls) { if (!plain(call)) return false; if (typeof call.id !== 'string' || call.id.length === 0 || call.type !== 'function' || !plain(call.function) || call.function.name !== 'write') return false; assistants.push({ id: call.id, index }); } } if (message.role === 'tool') results.push({ id: message.tool_call_id, content: message.content, index }); } return assistants.length === 1 && results.length === 1 && results[0].id === assistants[0].id && results[0].index > assistants[0].index && results[0].content === SUCCESS_TEXT; }",
+    'Amendment 015 reject malformed second-request messages and tool calls');
+
+  source = replaceOnce(source, "    const noToolsPlan = buildPiConformanceInvocation({ ...baseRequest, prerequisiteToolMode: 'NO_TOOLS' }, discovery);", lines([
+    "    const noToolsPlan = buildPiConformanceInvocation({ ...baseRequest, prerequisiteToolMode: 'NO_TOOLS' }, discovery);",
+    "    if (noToolsPlan.args.includes('--extension') || noToolsPlan.args.includes('-e')) throw new Error('Pi R181 completion self-test unexpectedly loaded an extension');",
+  ]), 'Amendment 015 completion extension-free self-test');
+
+  source = replaceOnce(source, "    if (writePlan.args.some((value) => ['bash', 'powershell', 'read', 'edit', 'grep', 'find', 'ls'].includes(value))) {\n      throw new Error('Pi R181 write allowlist widened in self-test');\n    }", lines([
+    "    if (writePlan.args.some((value) => ['bash', 'powershell', 'read', 'edit', 'grep', 'find', 'ls'].includes(value))) {",
+    "      throw new Error('Pi R181 write allowlist widened in self-test');",
+    '    }',
+    "    if (writePlan.args.filter((value) => value === '--no-extensions').length !== 1 || writePlan.args.includes('--extension') || writePlan.args.includes('-e')) throw new Error('Pi R181 base write plan extension boundary drifted');",
+    "    const loadShaper = async (label) => {",
+    "      const auditPath = join(temp, 'pi-tool-choice-' + label + '.jsonl');",
+    "      const extensionPath = join(temp, 'pi-tool-choice-' + label + '.mjs');",
+    '      const extensionSource = buildPiFirstRequestToolChoiceExtensionSource(auditPath);',
+    "      if ((extensionSource.match(/pi\\.on\\(/g) ?? []).length !== 1 || !extensionSource.includes(\"pi.on('before_provider_request'\")) throw new Error('Pi request-shaping extension registered unexpected behavior');",
+    "      writeFileSync(extensionPath, extensionSource, { flag: 'wx' });",
+    "      const module = await import(pathToFileURL(extensionPath).href + '?case=' + encodeURIComponent(label));",
+    '      const registrations = []; let handler = null;',
+    "      module.default({ on(name, value) { registrations.push(name); if (name === 'before_provider_request') handler = value; } });",
+    "      if (registrations.length !== 1 || registrations[0] !== 'before_provider_request' || typeof handler !== 'function') throw new Error('Pi request-shaping extension registration self-test failed');",
+    '      return { auditPath, extensionPath, handler };',
+    '    };',
+    "    const writeTool = { type: 'function', function: { name: 'write', description: 'write', parameters: { type: 'object' } } };",
+    "    const firstPayload = { model: CANONICAL_MODEL, messages: [{ role: 'system', content: 'system' }, { role: 'user', content: 'user' }], tools: [writeTool], stream: true };",
+    "    const positive = await loadShaper('positive'); let positiveAborts = 0;",
+    '    const firstOutput = await positive.handler({ payload: firstPayload }, { abort() { positiveAborts += 1; } });',
+    "    if (positiveAborts !== 0 || firstOutput === firstPayload || firstOutput.tool_choice !== 'required') throw new Error('Pi first request was not forced exactly once');",
+    '    const firstWithoutChoice = { ...firstOutput }; delete firstWithoutChoice.tool_choice;',
+    "    if (JSON.stringify(firstWithoutChoice) !== JSON.stringify(firstPayload)) throw new Error('Pi first request shaper changed a non-tool-choice field');",
+    "    const secondPayload = { model: CANONICAL_MODEL, messages: [...firstPayload.messages, { role: 'assistant', content: null, tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'write', arguments: '{}' } }] }, { role: 'tool', tool_call_id: 'call-1', content: 'Successfully wrote to ' + SMOKE_FILE }], tools: [writeTool], stream: true };",
+    '    const secondOutput = await positive.handler({ payload: secondPayload }, { abort() { positiveAborts += 1; } });',
+    "    if (positiveAborts !== 0 || secondOutput !== secondPayload || Object.prototype.hasOwnProperty.call(secondOutput, 'tool_choice')) throw new Error('Pi second request was not exact unforced pass-through');",
+    "    requireExactPiToolChoiceAudit(readFileSync(positive.auditPath, 'utf8'));",
+    "    const invalidFirstPayloads = [null, [], { ...firstPayload, model: 'wrong-model' }, { ...firstPayload, tools: [] }, { ...firstPayload, tools: [writeTool, writeTool] }, { ...firstPayload, tools: [{ type: 'function', function: { name: 'read' } }] }, { ...firstPayload, tool_choice: 'required' }, secondPayload];",
+    '    for (let index = 0; index < invalidFirstPayloads.length; index += 1) {',
+    "      const invalid = await loadShaper('invalid-first-' + index); let aborts = 0; const payload = invalidFirstPayloads[index];",
+    '      const output = await invalid.handler({ payload }, { abort() { aborts += 1; } });',
+    "      if (aborts !== 1 || output !== payload) throw new Error('Pi invalid first-request state did not fail closed with abort');",
+    '    }',
+    "    const badContinuation = await loadShaper('bad-continuation'); let badContinuationAborts = 0;",
+    '    await badContinuation.handler({ payload: firstPayload }, { abort() { badContinuationAborts += 1; } });',
+    "    const badSecond = { ...secondPayload, messages: firstPayload.messages };",
+    '    const badSecondOutput = await badContinuation.handler({ payload: badSecond }, { abort() { badContinuationAborts += 1; } });',
+    "    if (badContinuationAborts !== 1 || badSecondOutput !== badSecond) throw new Error('Pi wrong second-request continuation did not fail closed');",
+    "    const thirdRequest = await loadShaper('third-request'); let thirdAborts = 0;",
+    '    await thirdRequest.handler({ payload: firstPayload }, { abort() { thirdAborts += 1; } });',
+    '    await thirdRequest.handler({ payload: secondPayload }, { abort() { thirdAborts += 1; } });',
+    '    const thirdOutput = await thirdRequest.handler({ payload: secondPayload }, { abort() { thirdAborts += 1; } });',
+    "    if (thirdAborts !== 1 || thirdOutput !== secondPayload) throw new Error('Pi third provider request did not fail closed');",
+    "    requireExactPiToolChoiceAudit(readFileSync(thirdRequest.auditPath, 'utf8'));",
+    "    const shapedWritePlan = shapePiSmokePlanWithExtension(writePlan, positive.extensionPath);",
+    "    const extensionIndexes = shapedWritePlan.args.flatMap((value, index) => value === '--extension' ? [index] : []);",
+    "    if (extensionIndexes.length !== 1 || shapedWritePlan.args[extensionIndexes[0] + 1] !== positive.extensionPath || shapedWritePlan.args.filter((value) => value === '--no-extensions').length !== 1) throw new Error('Pi explicit-only extension plan self-test failed');",
+    "    const shapedToolIndexes = shapedWritePlan.args.flatMap((value, index) => value === '--tools' ? [index] : []);",
+    "    if (shapedToolIndexes.length !== 1 || shapedWritePlan.args[shapedToolIndexes[0] + 1] !== 'write') throw new Error('Pi shaped plan widened the write-only tool boundary');",
+  ]), 'Amendment 015 deterministic shaper self-tests');
+
+  source = replaceOnce(source,
+    "    const invalidFirstPayloads = [null, [], { ...firstPayload, model: 'wrong-model' }, { ...firstPayload, tools: [] }, { ...firstPayload, tools: [writeTool, writeTool] }, { ...firstPayload, tools: [{ type: 'function', function: { name: 'read' } }] }, { ...firstPayload, tool_choice: 'required' }, secondPayload];",
+    "    const invalidFirstPayloads = [null, [], { ...firstPayload, model: 'wrong-model' }, { ...firstPayload, tools: [] }, { ...firstPayload, tools: [writeTool, writeTool] }, { ...firstPayload, tools: [{ type: 'function', function: { name: 'read' } }] }, { ...firstPayload, tool_choice: 'required' }, secondPayload, { ...firstPayload, messages: [...firstPayload.messages, null] }];",
+    'Amendment 015 malformed first-request message self-test');
+  source = replaceOnce(source,
+    "    if (badContinuationAborts !== 1 || badSecondOutput !== badSecond) throw new Error('Pi wrong second-request continuation did not fail closed');",
+    lines([
+      "    if (badContinuationAborts !== 1 || badSecondOutput !== badSecond) throw new Error('Pi wrong second-request continuation did not fail closed');",
+      "    const malformedSecondPayloads = [",
+      "      { ...secondPayload, messages: [...secondPayload.messages, null] },",
+      "      { ...secondPayload, messages: secondPayload.messages.map((message) => message?.role === 'assistant' ? { ...message, tool_calls: [...message.tool_calls, null] } : message) },",
+      "    ];",
+      "    for (let index = 0; index < malformedSecondPayloads.length; index += 1) {",
+      "      const malformed = await loadShaper('malformed-second-' + index); let malformedAborts = 0;",
+      "      await malformed.handler({ payload: firstPayload }, { abort() { malformedAborts += 1; } });",
+      "      const payload = malformedSecondPayloads[index];",
+      "      const output = await malformed.handler({ payload }, { abort() { malformedAborts += 1; } });",
+      "      if (malformedAborts !== 1 || output !== payload) throw new Error('Pi malformed second-request state did not fail closed with abort');",
+      "    }",
+    ]),
+    'Amendment 015 malformed second-request message and tool-call self-tests');
+
+  source = replaceOnce(source, "    if (completionPlan.args.filter((value) => value === '--no-tools').length !== 1 || completionPlan.args.includes('--tools')) {\n      throw new Error('Pi completion subcase was not exact no-tools');\n    }", lines([
+    "    if (completionPlan.args.filter((value) => value === '--no-tools').length !== 1 || completionPlan.args.includes('--tools')) {",
+    "      throw new Error('Pi completion subcase was not exact no-tools');",
+    '    }',
+    "    if (completionPlan.args.includes('--extension') || completionPlan.args.includes('-e')) throw new Error('Pi completion subcase unexpectedly loaded a request-shaping extension');",
+  ]), 'Amendment 015 runtime completion extension-free boundary');
+
+  source = replaceOnce(source, "    mark(record, 'pi_tool_allowlist_exact_write_only');\n    if (piSmokePlan.requestedProvider !== CANONICAL_PROVIDER || piSmokePlan.requestedModel !== CANONICAL_MODEL) {", lines([
+    "    mark(record, 'pi_tool_allowlist_exact_write_only');",
+    "    if (piSmokePlan.args.filter((value) => value === '--no-extensions').length !== 1 || piSmokePlan.args.includes('--extension') || piSmokePlan.args.includes('-e')) throw new Error('Pi base write-smoke extension boundary drifted');",
+    "    const piSmokeAuditPath = join(piSmokeEnvRoot, 'first-request-tool-choice-audit.jsonl');",
+    "    const piSmokeExtensionPath = join(piSmokeEnvRoot, 'first-request-tool-choice.mjs');",
+    '    writeFileSync(piSmokeExtensionPath, buildPiFirstRequestToolChoiceExtensionSource(piSmokeAuditPath), { flag: \'wx\' });',
+    '    const shapedPiSmokePlan = shapePiSmokePlanWithExtension(piSmokePlan, piSmokeExtensionPath);',
+    "    const extensionIndexes = shapedPiSmokePlan.args.flatMap((value, index) => value === '--extension' ? [index] : []);",
+    "    if (extensionIndexes.length !== 1 || shapedPiSmokePlan.args[extensionIndexes[0] + 1] !== piSmokeExtensionPath || shapedPiSmokePlan.args.filter((value) => value === '--no-extensions').length !== 1) throw new Error('Pi write-smoke explicit extension boundary was not exact');",
+    "    if (piSmokePlan.requestedProvider !== CANONICAL_PROVIDER || piSmokePlan.requestedModel !== CANONICAL_MODEL) {",
+  ]), 'Amendment 015 runtime explicit extension plan');
+
+  source = replaceOnce(source, '    const piSmokeProcess = supervisePiPlan(piSmokePlan);', '    const piSmokeProcess = supervisePiPlan(shapedPiSmokePlan);', 'Amendment 015 shaped Pi smoke execution');
+  source = replaceOnce(source, "    requireExactPiWriteEvidence(piSmokeProcessResult.stdout);\n    await verifyExactSmoke(piSmokeRepo, piSmokeBefore);\n    mark(record, 'pi_bounded_tool_write_smoke');", lines([
+    '    requireExactPiWriteEvidence(piSmokeProcessResult.stdout);',
+    "    requireExactPiToolChoiceAudit(readFileSync(piSmokeAuditPath, 'utf8'));",
+    "    mark(record, 'pi_first_request_tool_choice_exact');",
+    '    await verifyExactSmoke(piSmokeRepo, piSmokeBefore);',
+    "    mark(record, 'pi_bounded_tool_write_smoke');",
+  ]), 'Amendment 015 runtime audit evidence');
+  return source;
+}
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
 if (gitBlobSha(canonicalSource) !== EXPECTED_BASE_BLOB) throw new Error('R181 canonical implementation blob drifted from Amendment 013 base');
-const tempRoot = mkdtempSync(join(resolve(process.env.RUNNER_TEMP || tmpdir()), 'delethos-r181-am013-'));
+const tempRoot = mkdtempSync(join(resolve(process.env.RUNNER_TEMP || tmpdir()), 'delethos-r181-am015-'));
 const tempScripts = join(tempRoot, 'scripts');
 mkdirSync(tempScripts, { recursive: false });
 const tempImplementation = join(tempScripts, 'recovery-provider-prereq-impl.mjs');
@@ -156,13 +327,15 @@ try {
   const amendment013Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment014(candidateSource);
   const amendment014Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment015(candidateSource);
+  const amendment015Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_014_SHAPING', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_015_SHAPING', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
