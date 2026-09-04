@@ -60,7 +60,7 @@ function applyAmendment014(source) {
   source = replaceOnce(source, "  'runtime_release_asset_public_metadata_exact',", "  'runtime_release_asset_public_binding_exact',", 'Amendment 014 release binding fact name');
   source = replaceOnce(source, "    runtime_release_asset_provenance_transport: 'github-expanded-assets-public-no-auth',", "    runtime_release_asset_provenance_transport: 'github-expanded-assets-exact-href-public-no-auth',", 'Amendment 014 release binding transport');
 
-  source = replaceSection(source, 'function parseReleaseAssetDigestHtml(html, assetName, expectedSha256) {', 'function parsePiToolEvidence(stdout) {', lines([
+  source = replaceSection(source, 'function parseReleaseAssetDigestHtml(html, assetName, expectedSha256) {', 'async function downloadVerified(url, destination, expectedSha256, timeoutMs) {', lines([
     'function parseReleaseAssetBindingHtml(html, assetName) {',
     "  if (typeof html !== 'string' || Buffer.byteLength(html, 'utf8') > MAX_JSON_BYTES) throw new Error('runtime release metadata HTML exceeded bounded size or was invalid');",
     '  const entry = assetEntryForName(html, assetName);',
