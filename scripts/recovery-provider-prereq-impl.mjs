@@ -45,7 +45,7 @@ const MAX_JSON_BYTES = 1024 * 1024;
 const RUNTIME_VERSION_TIMEOUT_MS = 120_000;
 const PI_TOOL_SMOKE_TIMEOUT_MS = 300_000;
 const PI_TOOL_POLL_MS = 20;
-const PI_TOOL_FLUSH_GRACE_MS = 25;
+const PI_TOOL_NATURAL_EXIT_GRACE_MS = 30_000;
 
 if (OPENCODE_R181_PROVIDER_ID !== CANONICAL_PROVIDER || OPENCODE_R181_MODEL_ID !== CANONICAL_MODEL) {
   throw new Error('OpenCode R181 identity constants drifted from canonical Amendment 008');
@@ -490,7 +490,7 @@ function openCodeEnvironment(root) {
   return { values, config };
 }
 
-function buildPiR181Models(baseURL, forceFirstTool) {
+function buildPiR181Models(baseURL) {
   const model = {
     id: CANONICAL_MODEL,
     name: 'Delethos local Qwen2.5 Coder 1.5B Q4_K_M',
@@ -500,7 +500,6 @@ function buildPiR181Models(baseURL, forceFirstTool) {
     maxTokens: 2048,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
   };
-  if (forceFirstTool) model.samplingParams = { tool_choice: 'required' };
   return {
     providers: {
       [CANONICAL_PROVIDER]: {
@@ -515,15 +514,11 @@ function buildPiR181Models(baseURL, forceFirstTool) {
   };
 }
 
-function exactPiConfig(config, baseURL, forceFirstTool) {
+function exactPiConfig(config, baseURL) {
   const provider = config?.providers?.[CANONICAL_PROVIDER];
   const models = provider?.models;
   if (!Array.isArray(models) || models.length !== 1) return false;
   const model = models[0];
-  const sampling = model?.samplingParams;
-  const exactSampling = forceFirstTool
-    ? sampling?.tool_choice === 'required' && Object.keys(sampling).length === 1
-    : sampling === undefined;
   return provider?.baseUrl === baseURL
     && provider?.api === 'openai-completions'
     && provider?.apiKey === 'delethos-local-no-secret'
@@ -537,7 +532,7 @@ function exactPiConfig(config, baseURL, forceFirstTool) {
     && model.input[0] === 'text'
     && model?.contextWindow === 16384
     && model?.maxTokens === 2048
-    && exactSampling;
+    && model?.samplingParams === undefined;
 }
 
 function exactOpenCodePolicy(config, baseURL) {
@@ -659,11 +654,17 @@ async function waitForExactSmokeThenStop(repo, running, timeoutMs = PI_TOOL_SMOK
       try {
         const content = await readFile(smokePath, 'utf8');
         if (content === SMOKE_CONTENT) {
-          await new Promise((resolveValue) => setTimeout(resolveValue, PI_TOOL_FLUSH_GRACE_MS));
-          if (settled === null) running.cancel();
-          return await running.result;
+          const naturalExitDeadline = Math.min(deadline, Date.now() + PI_TOOL_NATURAL_EXIT_GRACE_MS);
+          while (settled === null && Date.now() < naturalExitDeadline) {
+            await new Promise((resolveValue) => setTimeout(resolveValue, PI_TOOL_POLL_MS));
+          }
+          if (settled !== null) return settled;
+          running.cancel();
+          const result = await running.result;
+          throw new Error(`Pi write smoke did not settle naturally within bounded grace: cause=${result.cause} exit=${result.exitCode ?? 'null'} cleanup=${result.cleanupStatus}`);
         }
-      } catch {
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('Pi write smoke did not settle naturally')) throw error;
         // The write may still be in progress. Continue bounded polling.
       }
     }
@@ -678,8 +679,7 @@ async function waitForExactSmokeThenStop(repo, running, timeoutMs = PI_TOOL_SMOK
 function validateForcedSmokeProcess(result) {
   if (result.outputTruncated) throw new Error('Pi write-smoke output was truncated');
   if (result.cause === 'CANCELLED') {
-    if (result.cleanupStatus !== 'SUCCEEDED') throw new Error(`Pi write-smoke cancellation cleanup failed: ${result.cleanupStatus}`);
-    return;
+    throw new Error(`Pi write-smoke cancellation cannot qualify as PASS: cleanup=${result.cleanupStatus}`);
   }
   if (result.cause === 'EXITED' && result.exitCode === 0) return;
   throw new Error(`Pi write-smoke process ended unexpectedly: cause=${result.cause} exit=${result.exitCode ?? 'null'} cleanup=${result.cleanupStatus}`);
@@ -693,12 +693,19 @@ async function selfTest() {
   if (!/^[0-9a-f]{40}$/.test(RUNTIME_COMMIT) || !/^[0-9a-f]{40}$/.test(MODEL_REVISION)) {
     throw new Error('pinned revision format is invalid');
   }
+  if (PI_TOOL_NATURAL_EXIT_GRACE_MS > 30_000 || PI_TOOL_NATURAL_EXIT_GRACE_MS >= PI_TOOL_SMOKE_TIMEOUT_MS) {
+    throw new Error('Pi natural-exit grace exceeded Amendment 010 bounds');
+  }
 
   const baseURL = 'http://127.0.0.1:12345/v1';
-  const ordinaryPiConfig = buildPiR181Models(baseURL, false);
-  const forcedPiConfig = buildPiR181Models(baseURL, true);
-  if (!exactPiConfig(ordinaryPiConfig, baseURL, false)) throw new Error('Pi ordinary R181 config self-test failed');
-  if (!exactPiConfig(forcedPiConfig, baseURL, true)) throw new Error('Pi forced-tool R181 config self-test failed');
+  const ordinaryPiConfig = buildPiR181Models(baseURL);
+  const smokePiConfig = buildPiR181Models(baseURL);
+  if (!exactPiConfig(ordinaryPiConfig, baseURL)) throw new Error('Pi ordinary R181 config self-test failed');
+  if (!exactPiConfig(smokePiConfig, baseURL)) throw new Error('Pi write-smoke R181 config self-test failed');
+  if (ordinaryPiConfig.providers[CANONICAL_PROVIDER].models[0].samplingParams !== undefined
+    || smokePiConfig.providers[CANONICAL_PROVIDER].models[0].samplingParams !== undefined) {
+    throw new Error('Pi R181 model config unexpectedly forced tool_choice');
+  }
   const openCodeConfig = buildOpenCodeR181Config(baseURL, SMOKE_FILE);
   if (!exactOpenCodePolicy(openCodeConfig, baseURL)) throw new Error('OpenCode R181 policy self-test failed');
 
@@ -717,6 +724,13 @@ async function selfTest() {
     try { requireExactPiWriteEvidence(invalid); } catch { rejected = true; }
     if (!rejected) throw new Error('Pi tool-evidence fail-closed self-test failed');
   }
+  let cancellationRejected = false;
+  try {
+    validateForcedSmokeProcess({ outputTruncated: false, cause: 'CANCELLED', exitCode: null, cleanupStatus: 'SUCCEEDED' });
+  } catch {
+    cancellationRejected = true;
+  }
+  if (!cancellationRejected) throw new Error('Pi cancellation fail-closed self-test failed');
 
   const temp = mkdtempSync(join(tmpdir(), 'delethos-r181-selftest-'));
   try {
@@ -784,7 +798,8 @@ async function selfTest() {
     arch: selected.arch,
     outcome: 'PASS',
     pi_max_tokens: 2048,
-    forced_tool_choice: 'required',
+    forced_tool_choice: 'absent',
+    pi_natural_exit_grace_ms: PI_TOOL_NATURAL_EXIT_GRACE_MS,
     runtime_version_timeout_ms: RUNTIME_VERSION_TIMEOUT_MS,
   }));
 }
@@ -939,8 +954,8 @@ async function main() {
     const piCompletionEnvRoot = join(piRoot, 'completion-environment');
     mkdirSync(piCompletionEnvRoot, { recursive: false });
     const piCompletionEnv = piEnvironment(piCompletionEnvRoot);
-    const piCompletionConfig = buildPiR181Models(baseURL, false);
-    if (!exactPiConfig(piCompletionConfig, baseURL, false)) throw new Error('Pi completion provider config drifted from Amendment 008');
+    const piCompletionConfig = buildPiR181Models(baseURL);
+    if (!exactPiConfig(piCompletionConfig, baseURL)) throw new Error('Pi completion provider config drifted from Amendment 008');
     writeFileSync(join(piCompletionEnv.config, 'models.json'), `${JSON.stringify(piCompletionConfig, null, 2)}\n`, { flag: 'wx' });
     const piCompletionRepo = createFixtureRepo(qualificationRoot, 'pi-completion-fixture');
     const piCompletionBefore = snapshotRepository(piCompletionRepo);
@@ -984,8 +999,8 @@ async function main() {
     const piSmokeEnvRoot = join(piRoot, 'smoke-environment');
     mkdirSync(piSmokeEnvRoot, { recursive: false });
     const piSmokeEnv = piEnvironment(piSmokeEnvRoot);
-    const piSmokeConfig = buildPiR181Models(baseURL, true);
-    if (!exactPiConfig(piSmokeConfig, baseURL, true)) throw new Error('Pi forced-tool provider config drifted from bounded R181 posture');
+    const piSmokeConfig = buildPiR181Models(baseURL);
+    if (!exactPiConfig(piSmokeConfig, baseURL)) throw new Error('Pi write-smoke provider config drifted from Amendment 010 posture');
     writeFileSync(join(piSmokeEnv.config, 'models.json'), `${JSON.stringify(piSmokeConfig, null, 2)}\n`, { flag: 'wx' });
     const piSmokeRepo = createFixtureRepo(qualificationRoot, 'pi-smoke-fixture');
     const piSmokeBefore = snapshotRepository(piSmokeRepo);
