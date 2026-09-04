@@ -56,6 +56,85 @@ function applyAmendment013(source) {
   return source;
 }
 
+function applyAmendment014(source) {
+  source = replaceOnce(source, "  'runtime_release_asset_public_metadata_exact',", "  'runtime_release_asset_public_binding_exact',", 'Amendment 014 release binding fact name');
+  source = replaceOnce(source, "    runtime_release_asset_provenance_transport: 'github-expanded-assets-public-no-auth',", "    runtime_release_asset_provenance_transport: 'github-expanded-assets-exact-href-public-no-auth',", 'Amendment 014 release binding transport');
+
+  source = replaceSection(source, 'function parseReleaseAssetDigestHtml(html, assetName, expectedSha256) {', 'async function downloadVerified(url, destination, expectedSha256, timeoutMs) {', lines([
+    'function parseReleaseAssetBindingHtml(html, assetName) {',
+    "  if (typeof html !== 'string' || Buffer.byteLength(html, 'utf8') > MAX_JSON_BYTES) throw new Error('runtime release metadata HTML exceeded bounded size or was invalid');",
+    '  const entry = assetEntryForName(html, assetName);',
+    "  const expectedPath = '/ggml-org/llama.cpp/releases/download/' + RUNTIME_RELEASE + '/' + assetName;",
+    "  const expectedHref = 'href=\"' + expectedPath + '\"';",
+    "  if (entry.split(expectedHref).length !== 2) throw new Error('runtime release asset entry was not bound to exactly one exact release/tag filename href');",
+    '  return expectedPath;',
+    '}',
+    '',
+    'async function fetchPublicReleaseAssetBinding(assetName, timeoutMs = 30_000) {',
+    "  const url = 'https://github.com/ggml-org/llama.cpp/releases/expanded_assets/' + RUNTIME_RELEASE;",
+    '  const response = await fetch(url, {',
+    "    redirect: 'follow',",
+    "    headers: { Accept: 'text/html', 'User-Agent': 'delethos-r181' },",
+    '    signal: AbortSignal.timeout(timeoutMs),',
+    '  });',
+    '  const finalURL = new URL(response.url || url);',
+    "  if (finalURL.protocol !== 'https:' || finalURL.hostname !== 'github.com') throw new Error('runtime release metadata redirected outside github.com');",
+    "  if (!response.ok) throw new Error('GET github.com returned HTTP ' + response.status);",
+    '  const text = await response.text();',
+    '  return parseReleaseAssetBindingHtml(text, assetName);',
+    '}',
+    '',
+  ]), 'Amendment 014 exact-href release binding parser');
+
+  source = replaceSection(source, "  const canonicalAssetEntry = '<li><a href=\"/ggml-org/llama.cpp/releases/download/' + RUNTIME_RELEASE + '/' + selected.runtimeAsset + '\">' + selected.runtimeAsset + '</a><span>sha256:' + selected.runtimeSha256 + '</span></li>';", "  const temp = mkdtempSync(join(tmpdir(), 'delethos-r181-selftest-'));", lines([
+    "  const expectedAssetPath = '/ggml-org/llama.cpp/releases/download/' + RUNTIME_RELEASE + '/' + selected.runtimeAsset;",
+    "  const canonicalAssetEntry = '<li><a href=\"' + expectedAssetPath + '\">' + selected.runtimeAsset + '</a></li>';",
+    "  if (parseReleaseAssetBindingHtml(canonicalAssetEntry, selected.runtimeAsset) !== expectedAssetPath) throw new Error('runtime release binding parser positive self-test failed');",
+    "  const diagnosticDigestEntry = canonicalAssetEntry.replace('</li>', '<span>sha256:' + '0'.repeat(64) + '</span></li>');",
+    "  if (parseReleaseAssetBindingHtml(diagnosticDigestEntry, selected.runtimeAsset) !== expectedAssetPath) throw new Error('runtime release binding parser treated diagnostic digest text as authoritative');",
+    "  const wrongRepositoryEntry = canonicalAssetEntry.replace('/ggml-org/llama.cpp/', '/wrong-org/llama.cpp/');",
+    "  const wrongTagEntry = canonicalAssetEntry.replace('/releases/download/' + RUNTIME_RELEASE + '/', '/releases/download/' + RUNTIME_RELEASE + '-wrong/');",
+    "  const wrongFilenameEntry = canonicalAssetEntry.replace('/' + selected.runtimeAsset + '\"', '/' + selected.runtimeAsset + '.wrong\"');",
+    "  const suffixLookalikeEntry = canonicalAssetEntry.replace('/' + selected.runtimeAsset + '\"', '/' + selected.runtimeAsset + '.sig\"');",
+    "  const prefixLookalikeEntry = canonicalAssetEntry.replace('/' + selected.runtimeAsset + '\"', '/prefix-' + selected.runtimeAsset + '\"');",
+    "  const digestOnlyEntry = '<li>' + selected.runtimeAsset + '<span>sha256:' + selected.runtimeSha256 + '</span></li>';",
+    "  for (const invalid of ['', canonicalAssetEntry + canonicalAssetEntry, wrongRepositoryEntry, wrongTagEntry, wrongFilenameEntry, suffixLookalikeEntry, prefixLookalikeEntry, digestOnlyEntry, canonicalAssetEntry.replace('</li>', '')]) {",
+    '    let rejected = false;',
+    '    try { parseReleaseAssetBindingHtml(invalid, selected.runtimeAsset); } catch { rejected = true; }',
+    "    if (!rejected) throw new Error('runtime release binding parser fail-closed self-test failed');",
+    '  }',
+    '',
+  ]), 'Amendment 014 deterministic release binding self-tests');
+
+  source = replaceOnce(source, "  try {\n    const envRoot = join(temp, 'pi');", lines([
+    '  try {',
+    "    const wrongArchiveBytes = Buffer.from('delethos-r181-wrong-archive', 'utf8');",
+    "    const wrongArchiveSha = createHash('sha256').update(wrongArchiveBytes).digest('hex');",
+    "    const wrongExpectedSha = (wrongArchiveSha[0] === '0' ? '1' : '0') + wrongArchiveSha.slice(1);",
+    "    const wrongArchivePath = join(temp, 'wrong-runtime-archive.bin');",
+    "    const wrongExtractRoot = join(temp, 'wrong-runtime-extract');",
+    '    let wrongArchiveRejected = false;',
+    '    try {',
+    "      await downloadVerified('data:application/octet-stream;base64,' + wrongArchiveBytes.toString('base64'), wrongArchivePath, wrongExpectedSha, 5_000);",
+    '      extractArchive(wrongArchivePath, wrongExtractRoot);',
+    '    } catch (error) {',
+    "      wrongArchiveRejected = error instanceof Error && error.message.includes('SHA-256 mismatch');",
+    '    }',
+    "    if (!wrongArchiveRejected || existsSync(wrongExtractRoot)) throw new Error('runtime archive wrong-byte pre-extraction self-test failed');",
+    '',
+    "    const envRoot = join(temp, 'pi');",
+  ]), 'Amendment 014 downloaded-byte integrity self-test');
+
+  source = replaceSection(source, '    const publicAssetDigest = await fetchPublicReleaseAssetDigest(selected.runtimeAsset, selected.runtimeSha256);', "    const runtimeRoot = join(qualificationRoot, 'runtime');", lines([
+    "    const expectedPublicAssetPath = '/ggml-org/llama.cpp/releases/download/' + RUNTIME_RELEASE + '/' + selected.runtimeAsset;",
+    '    const publicAssetBinding = await fetchPublicReleaseAssetBinding(selected.runtimeAsset);',
+    "    if (publicAssetBinding !== expectedPublicAssetPath) throw new Error('runtime public release-asset binding did not match the pinned release/tag/filename');",
+    "    mark(record, 'runtime_release_asset_public_binding_exact');",
+    '',
+  ]), 'Amendment 014 canonical release binding execution');
+  return source;
+}
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
@@ -75,13 +154,15 @@ try {
   if (gitBlobSha(candidateSource) !== EXPECTED_AMENDMENT_010_BLOB) throw new Error('R181 Amendment 010 implementation failed exact blob verification');
   candidateSource = applyAmendment013(candidateSource);
   const amendment013Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment014(candidateSource);
+  const amendment014Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_013_SHAPING', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, runtime_provenance: 'git-ls-remote+github-expanded-assets', pi_evidence: 'durable-message-end' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_014_SHAPING', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
