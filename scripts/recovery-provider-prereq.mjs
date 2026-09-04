@@ -188,6 +188,15 @@ function applyAmendment015(source) {
     'function supervisePiPlan(plan) {',
   ]), 'Amendment 015 Pi request-shaping helpers');
 
+  source = replaceOnce(source,
+    "function noPriorToolContinuation(payload) { if (!Array.isArray(payload.messages)) return false; return payload.messages.every((message) => !plain(message) || (message.role !== 'tool' && !(message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length > 0))); }",
+    "function noPriorToolContinuation(payload) { if (!Array.isArray(payload.messages)) return false; for (const message of payload.messages) { if (!plain(message)) return false; if (message.role === 'tool') return false; if (message.role === 'assistant' && message.tool_calls !== undefined) { if (!Array.isArray(message.tool_calls)) return false; for (const call of message.tool_calls) if (!plain(call)) return false; if (message.tool_calls.length > 0) return false; } } return true; }",
+    'Amendment 015 reject malformed first-request messages');
+  source = replaceOnce(source,
+    "function followsSuccessfulWriteResult(payload) { if (!Array.isArray(payload.messages)) return false; const assistants = []; const results = []; payload.messages.forEach((message, index) => { if (!plain(message)) return; if (message.role === 'assistant' && Array.isArray(message.tool_calls)) { for (const call of message.tool_calls) { if (plain(call) && typeof call.id === 'string' && call.id.length > 0 && call.type === 'function' && plain(call.function) && call.function.name === 'write') assistants.push({ id: call.id, index }); else if (plain(call)) assistants.push({ id: null, index }); } } if (message.role === 'tool') results.push({ id: message.tool_call_id, content: message.content, index }); }); return assistants.length === 1 && results.length === 1 && assistants[0].id !== null && results[0].id === assistants[0].id && results[0].index > assistants[0].index && results[0].content === SUCCESS_TEXT; }",
+    "function followsSuccessfulWriteResult(payload) { if (!Array.isArray(payload.messages)) return false; const assistants = []; const results = []; for (let index = 0; index < payload.messages.length; index += 1) { const message = payload.messages[index]; if (!plain(message)) return false; if (message.role === 'assistant' && message.tool_calls !== undefined) { if (!Array.isArray(message.tool_calls)) return false; for (const call of message.tool_calls) { if (!plain(call)) return false; if (typeof call.id !== 'string' || call.id.length === 0 || call.type !== 'function' || !plain(call.function) || call.function.name !== 'write') return false; assistants.push({ id: call.id, index }); } } if (message.role === 'tool') results.push({ id: message.tool_call_id, content: message.content, index }); } return assistants.length === 1 && results.length === 1 && results[0].id === assistants[0].id && results[0].index > assistants[0].index && results[0].content === SUCCESS_TEXT; }",
+    'Amendment 015 reject malformed second-request messages and tool calls');
+
   source = replaceOnce(source, "    const noToolsPlan = buildPiConformanceInvocation({ ...baseRequest, prerequisiteToolMode: 'NO_TOOLS' }, discovery);", lines([
     "    const noToolsPlan = buildPiConformanceInvocation({ ...baseRequest, prerequisiteToolMode: 'NO_TOOLS' }, discovery);",
     "    if (noToolsPlan.args.includes('--extension') || noToolsPlan.args.includes('-e')) throw new Error('Pi R181 completion self-test unexpectedly loaded an extension');",
@@ -244,6 +253,28 @@ function applyAmendment015(source) {
     "    const shapedToolIndexes = shapedWritePlan.args.flatMap((value, index) => value === '--tools' ? [index] : []);",
     "    if (shapedToolIndexes.length !== 1 || shapedWritePlan.args[shapedToolIndexes[0] + 1] !== 'write') throw new Error('Pi shaped plan widened the write-only tool boundary');",
   ]), 'Amendment 015 deterministic shaper self-tests');
+
+  source = replaceOnce(source,
+    "    const invalidFirstPayloads = [null, [], { ...firstPayload, model: 'wrong-model' }, { ...firstPayload, tools: [] }, { ...firstPayload, tools: [writeTool, writeTool] }, { ...firstPayload, tools: [{ type: 'function', function: { name: 'read' } }] }, { ...firstPayload, tool_choice: 'required' }, secondPayload];",
+    "    const invalidFirstPayloads = [null, [], { ...firstPayload, model: 'wrong-model' }, { ...firstPayload, tools: [] }, { ...firstPayload, tools: [writeTool, writeTool] }, { ...firstPayload, tools: [{ type: 'function', function: { name: 'read' } }] }, { ...firstPayload, tool_choice: 'required' }, secondPayload, { ...firstPayload, messages: [...firstPayload.messages, null] }];",
+    'Amendment 015 malformed first-request message self-test');
+  source = replaceOnce(source,
+    "    if (badContinuationAborts !== 1 || badSecondOutput !== badSecond) throw new Error('Pi wrong second-request continuation did not fail closed');",
+    lines([
+      "    if (badContinuationAborts !== 1 || badSecondOutput !== badSecond) throw new Error('Pi wrong second-request continuation did not fail closed');",
+      "    const malformedSecondPayloads = [",
+      "      { ...secondPayload, messages: [...secondPayload.messages, null] },",
+      "      { ...secondPayload, messages: secondPayload.messages.map((message) => message?.role === 'assistant' ? { ...message, tool_calls: [...message.tool_calls, null] } : message) },",
+      "    ];",
+      "    for (let index = 0; index < malformedSecondPayloads.length; index += 1) {",
+      "      const malformed = await loadShaper('malformed-second-' + index); let malformedAborts = 0;",
+      "      await malformed.handler({ payload: firstPayload }, { abort() { malformedAborts += 1; } });",
+      "      const payload = malformedSecondPayloads[index];",
+      "      const output = await malformed.handler({ payload }, { abort() { malformedAborts += 1; } });",
+      "      if (malformedAborts !== 1 || output !== payload) throw new Error('Pi malformed second-request state did not fail closed with abort');",
+      "    }",
+    ]),
+    'Amendment 015 malformed second-request message and tool-call self-tests');
 
   source = replaceOnce(source, "    if (completionPlan.args.filter((value) => value === '--no-tools').length !== 1 || completionPlan.args.includes('--tools')) {\n      throw new Error('Pi completion subcase was not exact no-tools');\n    }", lines([
     "    if (completionPlan.args.filter((value) => value === '--no-tools').length !== 1 || completionPlan.args.includes('--tools')) {",
