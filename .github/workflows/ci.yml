@@ -341,7 +341,7 @@ jobs:
               arch: 'arm64',
               copilot: {
                 asset: 'copilot-darwin-arm64.tar.gz',
-                sha256: 'c03bfc58c4402ec31d09d721bf556fcc2c42e',
+                sha256: 'c03bfc58c4402ec31d09ca11c379e1c17e95c3441f48009d721bf556fcc2c42e',
               },
               pi: {
                 asset: 'pi-darwin-arm64.tar.gz',
@@ -1172,7 +1172,7 @@ jobs:
 
   recovery-provider-prereq:
     name: recovery provider prerequisite / ${{ matrix.os }}
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'TheHalfMoon/Delethos' && github.event.head_commit.message == '[provider-prereq]' }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'TheHalfMoon/Delethos' && startsWith(github.event.head_commit.message, '[provider-prereq]') }}
     strategy:
       fail-fast: false
       matrix:
