@@ -667,9 +667,16 @@ function applyAmendment018(source) {
     'Amendment 018 final structured write and terminal validation');
 
   source = replaceOnce(source,
+    "  const witnessFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'tool_calls' }] };",
+    lines([
+      "  const witnessFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'tool_calls' }] };",
+      "  const stopFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'stop' }] };",
+    ]),
+    'Amendment 018 early stop terminal fixture');
+
+  source = replaceOnce(source,
     "  const contradictoryFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'stop' }] };",
     lines([
-      "  const stopFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'stop' }] };",
       "  const contradictoryFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'length' }] };",
       "  const unknownFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'unexpected' }] };",
     ]),
