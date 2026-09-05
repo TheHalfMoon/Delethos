@@ -627,11 +627,118 @@ function applyAmendment017(source) {
   return source;
 }
 
+function applyAmendment018(source) {
+  source = replaceOnce(source,
+    lines([
+      "      if (choice.finish_reason !== 'tool_calls' || finishReason !== null) throw new Error('llama forced-tool stream terminal reason contradicted a tool call');",
+      '      finishReason = choice.finish_reason;',
+    ]),
+    lines([
+      "      if (finishReason !== null) throw new Error('llama forced-tool stream terminal_state_contradiction');",
+      "      if (choice.finish_reason !== 'tool_calls' && choice.finish_reason !== 'stop') throw new Error('llama forced-tool stream terminal_state_contradiction');",
+      "      if (choice.finish_reason === 'stop') {",
+      "        if (call === null) throw new Error('llama forced-tool stream no_complete_tool_call_before_terminal');",
+      "        if (call.id === null || call.type !== 'function' || call.name !== 'write') throw new Error('llama forced-tool stream structured_tool_call_contradiction');",
+      '        let terminalArgs;',
+      "        try { terminalArgs = JSON.parse(call.arguments); } catch { throw new Error('llama forced-tool stream incomplete_tool_call_before_terminal'); }",
+      "        if (!plain(terminalArgs)) throw new Error('llama forced-tool stream structured_tool_call_contradiction');",
+      '        const terminalKeys = Object.keys(terminalArgs).sort();',
+      "        if (terminalKeys.length !== 2 || terminalKeys[0] !== 'content' || terminalKeys[1] !== 'path' || terminalArgs.path !== SMOKE_FILE || terminalArgs.content !== SMOKE_CONTENT) throw new Error('llama forced-tool stream structured_tool_call_contradiction');",
+      '      }',
+      '      finishReason = choice.finish_reason;',
+    ]),
+    'Amendment 018 reconcile stop only after exact write');
+
+  source = replaceOnce(source,
+    lines([
+      "      if (fragment.type !== undefined && fragment.type !== 'function') throw new Error('llama forced-tool stream tool-call type drifted');",
+      "      if (call === null) call = { id: null, name: '', arguments: '' };",
+    ]),
+    lines([
+      "      if (fragment.type !== undefined && fragment.type !== null && fragment.type !== 'function') throw new Error('llama forced-tool stream tool-call type drifted');",
+      "      if (call === null) call = { id: null, type: null, name: '', arguments: '' };",
+      "      if (fragment.type === 'function') call.type = 'function';",
+    ]),
+    'Amendment 018 require observed function type');
+
+  source = replaceOnce(source,
+    "  if (!sawData || !done || finishReason !== 'tool_calls' || call === null || call.name !== 'write') throw new Error('llama forced-tool stream did not contain one complete write tool call');",
+    "  if (!sawData || !done || (finishReason !== 'tool_calls' && finishReason !== 'stop') || call === null || call.id === null || call.type !== 'function' || call.name !== 'write') throw new Error('llama forced-tool stream did not contain one complete write tool call');",
+    'Amendment 018 final structured write and terminal validation');
+
+  source = replaceOnce(source,
+    "  const contradictoryFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'stop' }] };",
+    lines([
+      "  const stopFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'stop' }] };",
+      "  const contradictoryFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'length' }] };",
+      "  const unknownFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'unexpected' }] };",
+    ]),
+    'Amendment 018 terminal fixtures');
+
+  source = replaceOnce(source,
+    "  if (JSON.stringify(Object.keys(canonicalWitnessResult).sort()) !== JSON.stringify(['content_sha256','path','tool_name'])) throw new Error('llama canonical witness normalized evidence shape drifted');",
+    lines([
+      "  if (JSON.stringify(Object.keys(canonicalWitnessResult).sort()) !== JSON.stringify(['content_sha256','path','tool_name'])) throw new Error('llama canonical witness normalized evidence shape drifted');",
+      '  const stopWitnessStream = makeSse([witnessStart, witnessContinue, stopFinish]);',
+      '  const stopWitnessResult = parseLlamaForcedToolStream(stopWitnessStream);',
+      "  if (JSON.stringify(Object.keys(stopWitnessResult).sort()) !== JSON.stringify(['content_sha256','path','tool_name'])) throw new Error('llama stop-after-exact-write normalized evidence shape drifted');",
+    ]),
+    'Amendment 018 stop-after-exact-write positive self-test');
+
+  source = replaceOnce(source,
+    "  if (JSON.stringify(Object.keys(mixedContentResult).sort()) !== JSON.stringify(['content_sha256','path','tool_name']) || JSON.stringify(mixedContentResult).includes(mixedContentSentinel)) throw new Error('llama mixed-content witness leaked assistant content into normalized evidence');",
+    lines([
+      "  if (JSON.stringify(Object.keys(mixedContentResult).sort()) !== JSON.stringify(['content_sha256','path','tool_name']) || JSON.stringify(mixedContentResult).includes(mixedContentSentinel)) throw new Error('llama mixed-content witness leaked assistant content into normalized evidence');",
+      '  const mixedContentStopStream = makeSse([mixedContentEvent, witnessStart, witnessContinue, stopFinish]);',
+      '  const mixedContentStopResult = parseLlamaForcedToolStream(mixedContentStopStream);',
+      "  if (JSON.stringify(Object.keys(mixedContentStopResult).sort()) !== JSON.stringify(['content_sha256','path','tool_name']) || JSON.stringify(mixedContentStopResult).includes(mixedContentSentinel)) throw new Error('llama mixed-content stop witness leaked assistant content into normalized evidence');",
+    ]),
+    'Amendment 018 mixed-content stop positive self-test');
+
+  source = replaceOnce(source,
+    "  const dataAfterDoneStream = canonicalWitnessStream + 'data: ' + JSON.stringify(witnessStart) + '\\n';",
+    lines([
+      "  const dataAfterDoneStream = canonicalWitnessStream + 'data: ' + JSON.stringify(witnessStart) + '\\n';",
+      '  const stopNoToolStream = makeSse([stopFinish]);',
+      '  const stopIncompleteStream = makeSse([witnessStart, stopFinish]);',
+      '  const stopWrongToolStream = makeSse([wrongToolStart, witnessContinue, stopFinish]);',
+      '  const stopWrongPathStream = makeSse([wrongPathStart, wrongPathContinue, stopFinish]);',
+      '  const stopWrongContentStream = makeSse([wrongContentStart, wrongContentContinue, stopFinish]);',
+      '  const stopDuplicateToolStream = makeSse([duplicateToolStart, witnessContinue, stopFinish]);',
+      '  const stopMalformedArgumentsStream = makeSse([malformedArgumentsStart, stopFinish]);',
+      '  const stopMissingModelStream = makeSse([missingModelStart, witnessContinue, stopFinish]);',
+      '  const stopWrongModelStream = makeSse([wrongModelStart, witnessContinue, stopFinish]);',
+      '  const completeUnknownTerminalStream = makeSse([witnessStart, witnessContinue, unknownFinish]);',
+      "  const duplicateDoneStream = canonicalWitnessStream + 'data: [DONE]\\n';",
+    ]),
+    'Amendment 018 terminal negative fixtures');
+
+  source = replaceOnce(source,
+    '    dataAfterDoneStream,',
+    lines([
+      '    dataAfterDoneStream,',
+      '    stopNoToolStream,',
+      '    stopIncompleteStream,',
+      '    stopWrongToolStream,',
+      '    stopWrongPathStream,',
+      '    stopWrongContentStream,',
+      '    stopDuplicateToolStream,',
+      '    stopMalformedArgumentsStream,',
+      '    stopMissingModelStream,',
+      '    stopWrongModelStream,',
+      '    completeUnknownTerminalStream,',
+      '    duplicateDoneStream,',
+    ]),
+    'Amendment 018 terminal fail-closed self-tests');
+
+  return source;
+}
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
 if (gitBlobSha(canonicalSource) !== EXPECTED_BASE_BLOB) throw new Error('R181 canonical implementation blob drifted from Amendment 013 base');
-const tempRoot = mkdtempSync(join(resolve(process.env.RUNNER_TEMP || tmpdir()), 'delethos-r181-am017-'));
+const tempRoot = mkdtempSync(join(resolve(process.env.RUNNER_TEMP || tmpdir()), 'delethos-r181-am018-'));
 const tempScripts = join(tempRoot, 'scripts');
 mkdirSync(tempScripts, { recursive: false });
 const tempImplementation = join(tempScripts, 'recovery-provider-prereq-impl.mjs');
@@ -654,13 +761,15 @@ try {
   const amendment016Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment017(candidateSource);
   const amendment017Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment018(candidateSource);
+  const amendment018Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_017_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_018_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
