@@ -572,11 +572,66 @@ function applyAmendment016(source) {
   return source;
 }
 
+function applyAmendment017(source) {
+  source = replaceOnce(
+    source,
+    "    if (typeof content === 'string' && content.length > 0) throw new Error('llama forced-tool stream emitted plain text alongside the required tool call');\n",
+    '',
+    'Amendment 017 defer mixed-content classification');
+
+  source = replaceOnce(source, '  parseLlamaForcedToolStream(canonicalWitnessStream);', lines([
+    '  const canonicalWitnessResult = parseLlamaForcedToolStream(canonicalWitnessStream);',
+    "  if (JSON.stringify(Object.keys(canonicalWitnessResult).sort()) !== JSON.stringify(['content_sha256','path','tool_name'])) throw new Error('llama canonical witness normalized evidence shape drifted');",
+    "  const mixedContentSentinel = 'amendment-017-assistant-content-must-not-escape';",
+    '  const mixedContentEvent = { model: CANONICAL_MODEL, choices: [{ delta: { content: mixedContentSentinel }, finish_reason: null }] };',
+    '  const mixedContentStream = makeSse([mixedContentEvent, witnessStart, witnessContinue, witnessFinish]);',
+    '  const mixedContentResult = parseLlamaForcedToolStream(mixedContentStream);',
+    "  if (JSON.stringify(Object.keys(mixedContentResult).sort()) !== JSON.stringify(['content_sha256','path','tool_name']) || JSON.stringify(mixedContentResult).includes(mixedContentSentinel)) throw new Error('llama mixed-content witness leaked assistant content into normalized evidence');",
+  ]), 'Amendment 017 mixed-content positive self-test');
+
+  source = replaceOnce(source, "  const wrongModelStart = structuredClone(witnessStart); wrongModelStart.model = 'unexpected-model';", lines([
+    "  const wrongModelStart = structuredClone(witnessStart); wrongModelStart.model = 'unexpected-model';",
+    "  const malformedContentEvent = structuredClone(mixedContentEvent); malformedContentEvent.choices[0].delta.content = { invalid: true };",
+    '  const mixedContentNoToolStream = makeSse([mixedContentEvent, witnessFinish]);',
+    '  const mixedContentWrongModelStream = makeSse([mixedContentEvent, wrongModelStart, witnessContinue, witnessFinish]);',
+    '  const mixedContentWrongToolStream = makeSse([mixedContentEvent, wrongToolStart, witnessContinue, witnessFinish]);',
+    '  const mixedContentDuplicateToolStream = makeSse([mixedContentEvent, duplicateToolStart, witnessContinue, witnessFinish]);',
+    '  const mixedContentWrongPathStream = makeSse([mixedContentEvent, wrongPathStart, wrongPathContinue, witnessFinish]);',
+    '  const mixedContentWrongContentStream = makeSse([mixedContentEvent, wrongContentStart, wrongContentContinue, witnessFinish]);',
+    '  const mixedContentMalformedContentStream = makeSse([malformedContentEvent, witnessStart, witnessContinue, witnessFinish]);',
+    '  const mixedContentPostTerminalStream = makeSse([mixedContentEvent, witnessStart, witnessContinue, witnessFinish, witnessStart]);',
+    '  const mixedContentMissingDoneStream = makeSse([mixedContentEvent, witnessStart, witnessContinue, witnessFinish], false);',
+    "  const dataAfterDoneStream = canonicalWitnessStream + 'data: ' + JSON.stringify(witnessStart) + '\\n';",
+  ]), 'Amendment 017 mixed-content negative fixtures');
+
+  source = replaceOnce(source, '    plainTextStream,', lines([
+    '    plainTextStream,',
+    '    mixedContentNoToolStream,',
+    '    mixedContentWrongModelStream,',
+    '    mixedContentWrongToolStream,',
+    '    mixedContentDuplicateToolStream,',
+    '    mixedContentWrongPathStream,',
+    '    mixedContentWrongContentStream,',
+    '    mixedContentMalformedContentStream,',
+    '    mixedContentPostTerminalStream,',
+    '    mixedContentMissingDoneStream,',
+    '    dataAfterDoneStream,',
+  ]), 'Amendment 017 mixed-content fail-closed self-tests');
+
+  source = replaceOnce(source, "  if (!overflowRejected) throw new Error('llama forced-tool stream overflow self-test failed');", lines([
+    "  if (!overflowRejected) throw new Error('llama forced-tool stream overflow self-test failed');",
+    '  let mixedContentOverflowRejected = false; try { parseLlamaForcedToolStream(mixedContentStream, Buffer.byteLength(mixedContentStream, \'utf8\') - 1); } catch { mixedContentOverflowRejected = true; }',
+    "  if (!mixedContentOverflowRejected) throw new Error('llama mixed-content forced-tool stream overflow self-test failed');",
+  ]), 'Amendment 017 mixed-content bounded-size self-test');
+
+  return source;
+}
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
 if (gitBlobSha(canonicalSource) !== EXPECTED_BASE_BLOB) throw new Error('R181 canonical implementation blob drifted from Amendment 013 base');
-const tempRoot = mkdtempSync(join(resolve(process.env.RUNNER_TEMP || tmpdir()), 'delethos-r181-am016-'));
+const tempRoot = mkdtempSync(join(resolve(process.env.RUNNER_TEMP || tmpdir()), 'delethos-r181-am017-'));
 const tempScripts = join(tempRoot, 'scripts');
 mkdirSync(tempScripts, { recursive: false });
 const tempImplementation = join(tempScripts, 'recovery-provider-prereq-impl.mjs');
@@ -597,13 +652,15 @@ try {
   const amendment015Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment016(candidateSource);
   const amendment016Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment017(candidateSource);
+  const amendment017Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_016_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_017_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
