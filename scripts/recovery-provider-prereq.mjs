@@ -471,7 +471,7 @@ function applyAmendment016(source) {
     '  return records;',
     '}',
     '',
-    'function buildPiFirstRequestToolChoiceExtensionSource(auditPath) {',
+    '',
   ]), 'Amendment 016 Layer B audit prefix validator');
 
   source = replaceOnce(source, "  const baseURL = 'http://127.0.0.1:12345/v1';", lines([
