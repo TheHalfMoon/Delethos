@@ -921,8 +921,8 @@ function applyAmendment019(source) {
     "  if (witnessRequest.body.max_tokens !== 2048) throw new Error('Amendment 019 Layer-A witness max_tokens self-test failed');",
   ]), 'Amendment 019 Layer-A output ceiling self-test');
 
-  source = replaceOnce(source, "  const duplicateTerminalStream = makeSse([witnessStart, witnessContinue, witnessFinish, stopFinish]);", lines([
-    "  const duplicateTerminalStream = makeSse([witnessStart, witnessContinue, witnessFinish, stopFinish]);",
+  source = replaceOnce(source, "  const contradictoryFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'length' }] };", lines([
+    "  const contradictoryFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'length' }] };",
     "  const lengthBeforeExactWriteStream = makeSse([contradictoryFinish]);",
     "  const lengthAfterExactWriteStream = makeSse([witnessStart, witnessContinue, contradictoryFinish]);",
   ]), 'Amendment 019 terminal classification fixtures');
