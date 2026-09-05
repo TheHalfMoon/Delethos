@@ -716,6 +716,7 @@ function applyAmendment018(source) {
       '  const stopMissingModelStream = makeSse([missingModelStart, witnessContinue, stopFinish]);',
       '  const stopWrongModelStream = makeSse([wrongModelStart, witnessContinue, stopFinish]);',
       '  const completeUnknownTerminalStream = makeSse([witnessStart, witnessContinue, unknownFinish]);',
+      '  const duplicateTerminalStream = makeSse([witnessStart, witnessContinue, witnessFinish, stopFinish]);',
       "  const duplicateDoneStream = canonicalWitnessStream + 'data: [DONE]\\n';",
     ]),
     'Amendment 018 terminal negative fixtures');
@@ -734,6 +735,7 @@ function applyAmendment018(source) {
       '    stopMissingModelStream,',
       '    stopWrongModelStream,',
       '    completeUnknownTerminalStream,',
+      '    duplicateTerminalStream,',
       '    duplicateDoneStream,',
     ]),
     'Amendment 018 terminal fail-closed self-tests');
