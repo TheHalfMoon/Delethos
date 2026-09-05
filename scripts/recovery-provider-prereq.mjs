@@ -671,14 +671,14 @@ function applyAmendment018(source) {
     lines([
       "  const witnessFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'tool_calls' }] };",
       "  const stopFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'stop' }] };",
+      "  const unknownFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'unexpected' }] };",
     ]),
-    'Amendment 018 early stop terminal fixture');
+    'Amendment 018 early terminal fixtures');
 
   source = replaceOnce(source,
     "  const contradictoryFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'stop' }] };",
     lines([
       "  const contradictoryFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'length' }] };",
-      "  const unknownFinish = { model: CANONICAL_MODEL, choices: [{ delta: {}, finish_reason: 'unexpected' }] };",
     ]),
     'Amendment 018 terminal fixtures');
 
