@@ -743,11 +743,236 @@ function applyAmendment018(source) {
   return source;
 }
 
+function applyAmendment019(source) {
+  source = replaceOnce(source, '      max_tokens: 256,', '      max_tokens: 2048,', 'Amendment 019 align Layer-A witness output ceiling');
+
+  source = replaceSection(source, 'function boundedReason(error) {', 'function exactPlatform() {', lines([
+    "const FAILURE_REASON_CODES = new Set([",
+    "  'duplicate_terminal_event',",
+    "  'terminal_length_before_exact_write',",
+    "  'terminal_length_after_exact_write',",
+    "  'unknown_terminal_reason',",
+    "  'malformed_sse',",
+    "  'malformed_json',",
+    "  'response_overflow',",
+    "  'request_timeout',",
+    "  'loopback_transport_failure',",
+    "  'no_complete_tool_call_before_terminal',",
+    "  'incomplete_tool_call_before_terminal',",
+    "  'structured_tool_call_contradiction',",
+    "  'server_cleanup_failure',",
+    "  'canonical_repository_cleanup_failure',",
+    "  'unclassified_internal_failure',",
+    "]);",
+    "",
+    "function codedFailure(code) {",
+    "  if (!FAILURE_REASON_CODES.has(code)) throw new Error('unknown fixed R181 failure code');",
+    "  const error = new Error('R181 fixed failure');",
+    "  Object.defineProperty(error, 'failureCode', { value: code, enumerable: false, configurable: false, writable: false });",
+    "  return error;",
+    "}",
+    "",
+    "function failureCode(error) {",
+    "  if (error && typeof error === 'object' && typeof error.failureCode === 'string' && FAILURE_REASON_CODES.has(error.failureCode)) return error.failureCode;",
+    "  if (error && typeof error === 'object' && (error.name === 'TimeoutError' || error.name === 'AbortError')) return 'request_timeout';",
+    "  return 'unclassified_internal_failure';",
+    "}",
+    "",
+    "function validateFailureRecord(record) {",
+    "  if (record.outcome !== 'FAIL') return;",
+    "  if (typeof record.failed_at !== 'string' || record.failed_at.length === 0) throw new Error('R181 FAIL record missing fixed failure boundary');",
+    "  if (typeof record.failure_reason !== 'string' || !FAILURE_REASON_CODES.has(record.failure_reason)) throw new Error('R181 FAIL record contained a non-allowlisted failure code');",
+    "}",
+    "",
+    "function expectFixedFailure(fn, expected) {",
+    "  let observed = null;",
+    "  try { fn(); } catch (error) { observed = failureCode(error); }",
+    "  if (observed !== expected) throw new Error('R181 fixed failure-code self-test mismatch');",
+    "}",
+    "",
+  ]), 'Amendment 019 fixed machine-failure-code helpers');
+
+  source = replaceSection(source, 'function parseLlamaForcedToolStream(text, maxBytes = MAX_JSON_BYTES) {', 'async function readBoundedLlamaForcedToolStream(response) {', lines([
+    "function parseLlamaForcedToolStream(text, maxBytes = MAX_JSON_BYTES) {",
+    "  if (typeof text !== 'string' || !Number.isInteger(maxBytes) || maxBytes < 1) throw codedFailure('malformed_sse');",
+    "  if (Buffer.byteLength(text, 'utf8') > maxBytes) throw codedFailure('response_overflow');",
+    "  const rows = text.replace(/\\r\\n/g, '\\n').split('\\n');",
+    "  let done = false;",
+    "  let sawData = false;",
+    "  let finishReason = null;",
+    "  let call = null;",
+    "  const plain = (value) => value && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;",
+    "  const callState = () => {",
+    "    if (call === null) return 'missing';",
+    "    if (call.id === null || call.type !== 'function' || call.name !== 'write') return 'contradiction';",
+    "    let args;",
+    "    try { args = JSON.parse(call.arguments); } catch { return 'incomplete'; }",
+    "    if (!plain(args)) return 'contradiction';",
+    "    const keys = Object.keys(args).sort();",
+    "    if (keys.length !== 2 || keys[0] !== 'content' || keys[1] !== 'path' || args.path !== SMOKE_FILE || args.content !== SMOKE_CONTENT) return 'contradiction';",
+    "    return 'exact';",
+    "  };",
+    "  const requireExactTerminalCall = () => {",
+    "    const state = callState();",
+    "    if (state === 'missing') throw codedFailure('no_complete_tool_call_before_terminal');",
+    "    if (state === 'incomplete') throw codedFailure('incomplete_tool_call_before_terminal');",
+    "    if (state !== 'exact') throw codedFailure('structured_tool_call_contradiction');",
+    "  };",
+    "  for (const row of rows) {",
+    "    if (row === '') continue;",
+    "    if (!row.startsWith('data:')) throw codedFailure('malformed_sse');",
+    "    const payloadText = row.slice('data:'.length).trimStart();",
+    "    if (payloadText === '[DONE]') { if (done) throw codedFailure('duplicate_terminal_event'); done = true; continue; }",
+    "    if (done) throw codedFailure('malformed_sse');",
+    "    if (finishReason !== null) throw codedFailure('duplicate_terminal_event');",
+    "    let event;",
+    "    try { event = JSON.parse(payloadText); } catch { throw codedFailure('malformed_json'); }",
+    "    if (!plain(event) || !Array.isArray(event.choices) || event.choices.length !== 1 || event.model !== CANONICAL_MODEL) throw codedFailure('structured_tool_call_contradiction');",
+    "    const choice = event.choices[0];",
+    "    if (!plain(choice) || !plain(choice.delta)) throw codedFailure('structured_tool_call_contradiction');",
+    "    sawData = true;",
+    "    if (choice.finish_reason !== undefined && choice.finish_reason !== null) {",
+    "      if (finishReason !== null) throw codedFailure('duplicate_terminal_event');",
+    "      if (choice.finish_reason === 'length') {",
+    "        throw codedFailure(callState() === 'exact' ? 'terminal_length_after_exact_write' : 'terminal_length_before_exact_write');",
+    "      }",
+    "      if (choice.finish_reason !== 'tool_calls' && choice.finish_reason !== 'stop') throw codedFailure('unknown_terminal_reason');",
+    "      requireExactTerminalCall();",
+    "      finishReason = choice.finish_reason;",
+    "    }",
+    "    const content = choice.delta.content;",
+    "    if (content !== undefined && content !== null && typeof content !== 'string') throw codedFailure('structured_tool_call_contradiction');",
+    "    const fragments = choice.delta.tool_calls;",
+    "    if (fragments === undefined) continue;",
+    "    if (!Array.isArray(fragments) || fragments.length === 0) throw codedFailure('structured_tool_call_contradiction');",
+    "    for (const fragment of fragments) {",
+    "      if (!plain(fragment) || fragment.index !== 0) throw codedFailure('structured_tool_call_contradiction');",
+    "      if (fragment.type !== undefined && fragment.type !== null && fragment.type !== 'function') throw codedFailure('structured_tool_call_contradiction');",
+    "      if (call === null) call = { id: null, type: null, name: '', arguments: '' };",
+    "      if (fragment.type === 'function') call.type = 'function';",
+    "      if (fragment.id !== undefined && fragment.id !== null) {",
+    "        if (typeof fragment.id !== 'string' || fragment.id.length === 0 || (call.id !== null && call.id !== fragment.id)) throw codedFailure('structured_tool_call_contradiction');",
+    "        call.id = fragment.id;",
+    "      }",
+    "      if (fragment.function !== undefined && fragment.function !== null) {",
+    "        if (!plain(fragment.function)) throw codedFailure('structured_tool_call_contradiction');",
+    "        if (fragment.function.name !== undefined && fragment.function.name !== null) {",
+    "          if (typeof fragment.function.name !== 'string' || fragment.function.name.length === 0 || (call.name !== '' && call.name !== fragment.function.name)) throw codedFailure('structured_tool_call_contradiction');",
+    "          call.name = fragment.function.name;",
+    "        }",
+    "        if (fragment.function.arguments !== undefined && fragment.function.arguments !== null) {",
+    "          if (typeof fragment.function.arguments !== 'string') throw codedFailure('structured_tool_call_contradiction');",
+    "          call.arguments += fragment.function.arguments;",
+    "        }",
+    "      }",
+    "    }",
+    "  }",
+    "  if (!sawData || !done || finishReason === null) throw codedFailure('no_complete_tool_call_before_terminal');",
+    "  requireExactTerminalCall();",
+    "  return { tool_name: 'write', path: SMOKE_FILE, content_sha256: createHash('sha256').update(SMOKE_CONTENT).digest('hex') };",
+    "}",
+    "",
+  ]), 'Amendment 019 fixed-code Layer-A parser');
+
+  source = replaceSection(source, 'async function readBoundedLlamaForcedToolStream(response) {', 'async function llamaForcedToolStreamWitness(baseURL) {', lines([
+    "async function readBoundedLlamaForcedToolStream(response) {",
+    "  if (!response.body) throw codedFailure('loopback_transport_failure');",
+    "  const chunks = []; let bytes = 0;",
+    "  try {",
+    "    for await (const chunk of response.body) {",
+    "      const buffer = Buffer.from(chunk); bytes += buffer.length;",
+    "      if (bytes > MAX_JSON_BYTES) throw codedFailure('response_overflow');",
+    "      chunks.push(buffer);",
+    "    }",
+    "  } catch (error) {",
+    "    const code = failureCode(error);",
+    "    if (code === 'response_overflow' || code === 'request_timeout') throw codedFailure(code);",
+    "    throw codedFailure('loopback_transport_failure');",
+    "  }",
+    "  return Buffer.concat(chunks).toString('utf8');",
+    "}",
+    "",
+  ]), 'Amendment 019 fixed-code bounded stream reader');
+
+  source = replaceSection(source, 'async function llamaForcedToolStreamWitness(baseURL) {', 'async function anonymousCompletion(baseURL) {', lines([
+    "async function llamaForcedToolStreamWitness(baseURL) {",
+    "  const request = buildLlamaForcedToolWitnessRequest(baseURL);",
+    "  let response;",
+    "  try {",
+    "    response = await fetch(request.endpoint, {",
+    "      method: 'POST',",
+    "      headers: { 'content-type': 'application/json' },",
+    "      body: JSON.stringify(request.body),",
+    "      signal: AbortSignal.timeout(120_000),",
+    "    });",
+    "  } catch (error) {",
+    "    if (failureCode(error) === 'request_timeout') throw codedFailure('request_timeout');",
+    "    throw codedFailure('loopback_transport_failure');",
+    "  }",
+    "  if (!response.ok) throw codedFailure('loopback_transport_failure');",
+    "  const text = await readBoundedLlamaForcedToolStream(response);",
+    "  return parseLlamaForcedToolStream(text);",
+    "}",
+    "",
+  ]), 'Amendment 019 fixed-code loopback transport');
+
+  source = replaceOnce(source, "  const witnessRequest = buildLlamaForcedToolWitnessRequest(baseURL);", lines([
+    "  const witnessRequest = buildLlamaForcedToolWitnessRequest(baseURL);",
+    "  if (witnessRequest.body.max_tokens !== 2048) throw new Error('Amendment 019 Layer-A witness max_tokens self-test failed');",
+  ]), 'Amendment 019 Layer-A output ceiling self-test');
+
+  source = replaceOnce(source, "  const duplicateTerminalStream = makeSse([witnessStart, witnessContinue, witnessFinish, stopFinish]);", lines([
+    "  const duplicateTerminalStream = makeSse([witnessStart, witnessContinue, witnessFinish, stopFinish]);",
+    "  const lengthBeforeExactWriteStream = makeSse([contradictoryFinish]);",
+    "  const lengthAfterExactWriteStream = makeSse([witnessStart, witnessContinue, contradictoryFinish]);",
+  ]), 'Amendment 019 terminal classification fixtures');
+
+  source = replaceOnce(source, '  const invalidWitnessStreams = [', lines([
+    "  expectFixedFailure(() => parseLlamaForcedToolStream(lengthBeforeExactWriteStream), 'terminal_length_before_exact_write');",
+    "  expectFixedFailure(() => parseLlamaForcedToolStream(lengthAfterExactWriteStream), 'terminal_length_after_exact_write');",
+    "  expectFixedFailure(() => parseLlamaForcedToolStream(completeUnknownTerminalStream), 'unknown_terminal_reason');",
+    "  expectFixedFailure(() => parseLlamaForcedToolStream(duplicateTerminalStream), 'duplicate_terminal_event');",
+    "  expectFixedFailure(() => parseLlamaForcedToolStream('event: message\\n'), 'malformed_sse');",
+    "  expectFixedFailure(() => parseLlamaForcedToolStream('data: {not-json}\\ndata: [DONE]\\n'), 'malformed_json');",
+    "  expectFixedFailure(() => parseLlamaForcedToolStream(canonicalWitnessStream, Buffer.byteLength(canonicalWitnessStream, 'utf8') - 1), 'response_overflow');",
+    "  const timeoutSentinel = new Error('amendment-019-timeout-sentinel'); timeoutSentinel.name = 'TimeoutError';",
+    "  if (failureCode(timeoutSentinel) !== 'request_timeout') throw new Error('Amendment 019 timeout fixed-code self-test failed');",
+    "  if (failureCode(codedFailure('loopback_transport_failure')) !== 'loopback_transport_failure') throw new Error('Amendment 019 transport fixed-code self-test failed');",
+    "  const failureSentinels = ['assistant-prose-sentinel', 'Authorization: Bearer credential-sentinel', 'token-sentinel', '/tmp/filesystem-sentinel', 'model-prose-sentinel', '{tool-argument-sentinel}'];",
+    "  for (const sentinel of failureSentinels) {",
+    "    const arbitrary = new Error(sentinel);",
+    "    const probe = { outcome: 'FAIL', failed_at: 'harness', failure_reason: failureCode(arbitrary) };",
+    "    validateFailureRecord(probe);",
+    "    if (probe.failure_reason !== 'unclassified_internal_failure' || JSON.stringify(probe).includes(sentinel)) throw new Error('Amendment 019 failure sentinel escaped fixed-code serialization');",
+    "  }",
+    "  let invalidFailureRecordRejected = false; try { validateFailureRecord({ outcome: 'FAIL', failed_at: 'harness', failure_reason: 'not-allowlisted' }); } catch { invalidFailureRecordRejected = true; }",
+    "  if (!invalidFailureRecordRejected) throw new Error('Amendment 019 evidence-consumer allowlist self-test failed');",
+    "  const invalidWitnessStreams = [",
+  ]), 'Amendment 019 deterministic fixed-code self-tests');
+
+  source = replaceOnce(source, "  const piConfig = buildPiR181Models(baseURL);", lines([
+    "  const piConfig = buildPiR181Models(baseURL);",
+    "  if (witnessRequest.body.max_tokens !== piConfig.providers[CANONICAL_PROVIDER].models[0].maxTokens || piConfig.providers[CANONICAL_PROVIDER].models[0].maxTokens !== 2048) throw new Error('Amendment 019 witness/Pi output ceilings diverged');",
+  ]), 'Amendment 019 witness and Pi ceiling equality self-test');
+
+  source = replaceOnce(source, "    record.failure_reason = boundedReason(error);", "    record.failure_reason = failureCode(error);", 'Amendment 019 fixed-code main failure serialization');
+  source = replaceOnce(source, "          record.failure_reason = `llama-server cleanup was ${result.cause}/${result.cleanupStatus}`;", "          record.failure_reason = 'server_cleanup_failure';", 'Amendment 019 fixed server cleanup code');
+  source = replaceOnce(source, "      record.failure_reason = 'canonical checkout changed during R181 qualification';", "      record.failure_reason = 'canonical_repository_cleanup_failure';", 'Amendment 019 fixed canonical cleanup code');
+  source = replaceOnce(source, "    console.log(JSON.stringify(record));", lines([
+    "    validateFailureRecord(record);",
+    "    console.log(JSON.stringify(record));",
+  ]), 'Amendment 019 final record evidence-consumer validation');
+
+  source = replaceSection(source, 'main().catch((error) => {', '', '', 'unused');
+
+  return source;
+}
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
 if (gitBlobSha(canonicalSource) !== EXPECTED_BASE_BLOB) throw new Error('R181 canonical implementation blob drifted from Amendment 013 base');
-const tempRoot = mkdtempSync(join(resolve(process.env.RUNNER_TEMP || tmpdir()), 'delethos-r181-am018-'));
+const tempRoot = mkdtempSync(join(resolve(process.env.RUNNER_TEMP || tmpdir()), 'delethos-r181-am019-'));
 const tempScripts = join(tempRoot, 'scripts');
 mkdirSync(tempScripts, { recursive: false });
 const tempImplementation = join(tempScripts, 'recovery-provider-prereq-impl.mjs');
@@ -772,13 +997,15 @@ try {
   const amendment017Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment018(candidateSource);
   const amendment018Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment019(candidateSource);
+  const amendment019Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_018_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_019_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
