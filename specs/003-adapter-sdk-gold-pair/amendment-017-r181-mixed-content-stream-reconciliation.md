@@ -19,7 +19,7 @@ Workflow run `33960124086` completed deterministic core CI successfully on Linux
 
 ```text
 failed_at = llama_forced_tool_stream_witness_exact
-failure_reason = llama forced-tool stream emitted plain text alongside the required tool call
+failure_reason = llama forced-tool stream emitted non-empty assistant content before the exact tool-call witness was completed
 ```
 
 The exact platform records were:
