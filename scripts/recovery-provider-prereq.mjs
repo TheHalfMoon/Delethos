@@ -963,7 +963,7 @@ function applyAmendment019(source) {
     "    console.log(JSON.stringify(record));",
   ]), 'Amendment 019 final record evidence-consumer validation');
 
-  source = replaceOnce(source, lines([
+  source = replaceOnce(source, [
     'main().catch((error) => {',
     '  console.log(JSON.stringify({',
     "    schema: 'delethos.spec003.r181-provider-prereq.v1',",
@@ -974,7 +974,7 @@ function applyAmendment019(source) {
     '  }));',
     '  process.exitCode = 1;',
     '});',
-  ]), lines([
+  ].join('\n'), [
     'main().catch((error) => {',
     '  const record = {',
     "    schema: 'delethos.spec003.r181-provider-prereq.v1',",
@@ -987,7 +987,7 @@ function applyAmendment019(source) {
     '  console.log(JSON.stringify(record));',
     '  process.exitCode = 1;',
     '});',
-  ]), 'Amendment 019 fixed outer-catch failure serialization');
+  ].join('\n'), 'Amendment 019 fixed outer-catch failure serialization');
 
   return source;
 }
