@@ -963,7 +963,31 @@ function applyAmendment019(source) {
     "    console.log(JSON.stringify(record));",
   ]), 'Amendment 019 final record evidence-consumer validation');
 
-  source = replaceSection(source, 'main().catch((error) => {', '', '', 'unused');
+  source = replaceOnce(source, lines([
+    'main().catch((error) => {',
+    '  console.log(JSON.stringify({',
+    "    schema: 'delethos.spec003.r181-provider-prereq.v1',",
+    "    source: 'CANONICAL_MAIN_PROVIDER_PREREQUISITE',",
+    "    outcome: 'FAIL',",
+    "    failed_at: 'harness',",
+    '    failure_reason: boundedReason(error),',
+    '  }));',
+    '  process.exitCode = 1;',
+    '});',
+  ]), lines([
+    'main().catch((error) => {',
+    '  const record = {',
+    "    schema: 'delethos.spec003.r181-provider-prereq.v1',",
+    "    source: 'CANONICAL_MAIN_PROVIDER_PREREQUISITE',",
+    "    outcome: 'FAIL',",
+    "    failed_at: 'harness',",
+    '    failure_reason: failureCode(error),',
+    '  };',
+    '  validateFailureRecord(record);',
+    '  console.log(JSON.stringify(record));',
+    '  process.exitCode = 1;',
+    '});',
+  ]), 'Amendment 019 fixed outer-catch failure serialization');
 
   return source;
 }
