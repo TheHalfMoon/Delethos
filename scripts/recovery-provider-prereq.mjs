@@ -11,6 +11,62 @@ const REPO_ROOT = dirname(SCRIPT_DIR);
 const IMPLEMENTATION_PATH = join(SCRIPT_DIR, 'recovery-provider-prereq-impl.mjs');
 const EXPECTED_BASE_BLOB = '0027b883aa046b39ae06278ff623c3e346cd25d0';
 const EXPECTED_AMENDMENT_010_BLOB = '587e2e2e8e3b2ce485e57e4e6f43934043ba6cb2';
+const AMENDMENT_020_TEMPLATE_BLOB = 'bdf7919a96cfe43d50914a007b9c0877bd0ec27e';
+const AMENDMENT_020_TEMPLATE = String.raw`{%- if tools %}
+    {{- '<|im_start|>system\n' }}
+    {%- if messages[0]['role'] == 'system' %}
+        {{- messages[0]['content'] }}
+    {%- else %}
+        {{- 'You are Qwen, created by Alibaba Cloud. You are a helpful assistant.' }}
+    {%- endif %}
+    {{- "\n\n# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>" }}
+    {%- for tool in tools %}
+        {{- "\n" }}
+        {{- tool | tojson }}
+    {%- endfor %}
+    {{- "\n</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call><|im_end|>\n" }}
+{%- else %}
+    {%- if messages[0]['role'] == 'system' %}
+        {{- '<|im_start|>system\n' + messages[0]['content'] + '<|im_end|>\n' }}
+    {%- else %}
+        {{- '<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n' }}
+    {%- endif %}
+{%- endif %}
+{%- for message in messages %}
+    {%- if (message.role == "user") or (message.role == "system" and not loop.first) or (message.role == "assistant" and not message.tool_calls) %}
+        {{- '<|im_start|>' + message.role + '\n' + message.content + '<|im_end|>' + '\n' }}
+    {%- elif message.role == "assistant" %}
+        {{- '<|im_start|>' + message.role }}
+        {%- if message.content %}
+            {{- '\n' + message.content }}
+        {%- endif %}
+        {%- for tool_call in message.tool_calls %}
+            {%- if tool_call.function is defined %}
+                {%- set tool_call = tool_call.function %}
+            {%- endif %}
+            {{- '\n<tool_call>\n{"name": "' }}
+            {{- tool_call.name }}
+            {{- '", "arguments": ' }}
+            {{- tool_call.arguments | tojson }}
+            {{- '}\n</tool_call>' }}
+        {%- endfor %}
+        {{- '<|im_end|>\n' }}
+    {%- elif message.role == "tool" %}
+        {%- if (loop.index0 == 0) or (messages[loop.index0 - 1].role != "tool") %}
+            {{- '<|im_start|>user' }}
+        {%- endif %}
+        {{- '\n<tool_response>\n' }}
+        {{- message.content }}
+        {{- '\n</tool_response>' }}
+        {%- if loop.last or (messages[loop.index0 + 1].role != "tool") %}
+            {{- '<|im_end|>\n' }}
+        {%- endif %}
+    {%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt %}
+    {{- '<|im_start|>assistant\n' }}
+{%- endif %}
+`;
 const AMENDMENT_010_PATCH = "--- a/scripts/recovery-provider-prereq-impl.mjs\n+++ b/scripts/recovery-provider-prereq-impl.mjs\n@@ -45,7 +45,7 @@\n const RUNTIME_VERSION_TIMEOUT_MS = 120_000;\n const PI_TOOL_SMOKE_TIMEOUT_MS = 300_000;\n const PI_TOOL_POLL_MS = 20;\n-const PI_TOOL_FLUSH_GRACE_MS = 25;\n+const PI_TOOL_NATURAL_EXIT_GRACE_MS = 30_000;\n \n if (OPENCODE_R181_PROVIDER_ID !== CANONICAL_PROVIDER || OPENCODE_R181_MODEL_ID !== CANONICAL_MODEL) {\n   throw new Error('OpenCode R181 identity constants drifted from canonical Amendment 008');\n@@ -490,7 +490,7 @@\n   return { values, config };\n }\n \n-function buildPiR181Models(baseURL, forceFirstTool) {\n+function buildPiR181Models(baseURL) {\n   const model = {\n     id: CANONICAL_MODEL,\n     name: 'Delethos local Qwen2.5 Coder 1.5B Q4_K_M',\n@@ -500,7 +500,6 @@\n     maxTokens: 2048,\n     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },\n   };\n-  if (forceFirstTool) model.samplingParams = { tool_choice: 'required' };\n   return {\n     providers: {\n       [CANONICAL_PROVIDER]: {\n@@ -515,15 +514,12 @@\n   };\n }\n \n-function exactPiConfig(config, baseURL, forceFirstTool) {\n+function exactPiConfig(config, baseURL) {\n   const provider = config?.providers?.[CANONICAL_PROVIDER];\n   const models = provider?.models;\n   if (!Array.isArray(models) || models.length !== 1) return false;\n   const model = models[0];\n-  const sampling = model?.samplingParams;\n-  const exactSampling = forceFirstTool\n-    ? sampling?.tool_choice === 'required' && Object.keys(sampling).length === 1\n-    : sampling === undefined;\n+  const exactSampling = model?.samplingParams === undefined;\n   return provider?.baseUrl === baseURL\n     && provider?.api === 'openai-completions'\n     && provider?.apiKey === 'delethos-local-no-secret'\n@@ -644,6 +640,10 @@\n   });\n }\n \n+function boundedNaturalExitDeadline(outerDeadline, smokeObservedAt) {\n+  return Math.min(outerDeadline, smokeObservedAt + PI_TOOL_NATURAL_EXIT_GRACE_MS);\n+}\n+\n async function waitForExactSmokeThenStop(repo, running, timeoutMs = PI_TOOL_SMOKE_TIMEOUT_MS) {\n   const smokePath = join(repo, SMOKE_FILE);\n   const deadline = Date.now() + timeoutMs;\n@@ -656,32 +656,41 @@\n     if (existsSync(smokePath)) {\n       const stat = lstatSync(smokePath);\n       if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Pi smoke target became a non-regular file');\n+      let content = null;\n       try {\n-        const content = await readFile(smokePath, 'utf8');\n-        if (content === SMOKE_CONTENT) {\n-          await new Promise((resolveValue) => setTimeout(resolveValue, PI_TOOL_FLUSH_GRACE_MS));\n-          if (settled === null) running.cancel();\n-          return await running.result;\n-        }\n+        content = await readFile(smokePath, 'utf8');\n       } catch {\n         // The write may still be in progress. Continue bounded polling.\n       }\n+      if (content === SMOKE_CONTENT) {\n+        const naturalDeadline = boundedNaturalExitDeadline(deadline, Date.now());\n+        while (settled === null && Date.now() < naturalDeadline) {\n+          const remaining = naturalDeadline - Date.now();\n+          await new Promise((resolveValue) => setTimeout(resolveValue, Math.min(PI_TOOL_POLL_MS, Math.max(1, remaining))));\n+        }\n+        if (settled !== null) return settled;\n+        running.cancel();\n+        const cancelled = await running.result;\n+        throw new Error(`Pi write smoke did not settle naturally within bounded grace: cause=${cancelled.cause} exit=${cancelled.exitCode ?? 'null'} cleanup=${cancelled.cleanupStatus}`);\n+      }\n     }\n     if (settled !== null) return settled;\n-    await new Promise((resolveValue) => setTimeout(resolveValue, PI_TOOL_POLL_MS));\n+    const remaining = deadline - Date.now();\n+    if (remaining > 0) {\n+      await new Promise((resolveValue) => setTimeout(resolveValue, Math.min(PI_TOOL_POLL_MS, remaining)));\n+    }\n   }\n   if (settled === null) running.cancel();\n   const result = await running.result;\n-  throw new Error(`Pi write smoke did not produce exact file before deadline: cause=${result.cause} exit=${result.exitCode ?? 'null'}`);\n+  throw new Error(`Pi write smoke did not produce exact file before deadline: cause=${result.cause} exit=${result.exitCode ?? 'null'} cleanup=${result.cleanupStatus}`);\n }\n \n function validateForcedSmokeProcess(result) {\n   if (result.outputTruncated) throw new Error('Pi write-smoke output was truncated');\n+  if (result.cause === 'EXITED' && result.exitCode === 0) return;\n   if (result.cause === 'CANCELLED') {\n-    if (result.cleanupStatus !== 'SUCCEEDED') throw new Error(`Pi write-smoke cancellation cleanup failed: ${result.cleanupStatus}`);\n-    return;\n-  }\n-  if (result.cause === 'EXITED' && result.exitCode === 0) return;\n+    throw new Error(`Pi write-smoke cancellation is fail-closed: cleanup=${result.cleanupStatus}`);\n+  }\n   throw new Error(`Pi write-smoke process ended unexpectedly: cause=${result.cause} exit=${result.exitCode ?? 'null'} cleanup=${result.cleanupStatus}`);\n }\n \n@@ -695,10 +704,29 @@\n   }\n \n   const baseURL = 'http://127.0.0.1:12345/v1';\n-  const ordinaryPiConfig = buildPiR181Models(baseURL, false);\n-  const forcedPiConfig = buildPiR181Models(baseURL, true);\n-  if (!exactPiConfig(ordinaryPiConfig, baseURL, false)) throw new Error('Pi ordinary R181 config self-test failed');\n-  if (!exactPiConfig(forcedPiConfig, baseURL, true)) throw new Error('Pi forced-tool R181 config self-test failed');\n+  const piConfig = buildPiR181Models(baseURL);\n+  if (!exactPiConfig(piConfig, baseURL)) throw new Error('Pi canonical R181 config self-test failed');\n+  if (piConfig.providers[CANONICAL_PROVIDER].models[0].samplingParams !== undefined) {\n+    throw new Error('Pi R181 config unexpectedly contains model-level samplingParams');\n+  }\n+  if (PI_TOOL_NATURAL_EXIT_GRACE_MS > 30_000 || PI_TOOL_SMOKE_TIMEOUT_MS !== 300_000) {\n+    throw new Error('Pi R181 natural-exit timing bounds drifted from Amendment 010');\n+  }\n+  const timingOrigin = 1_000_000;\n+  if (boundedNaturalExitDeadline(timingOrigin + PI_TOOL_SMOKE_TIMEOUT_MS, timingOrigin) !== timingOrigin + PI_TOOL_NATURAL_EXIT_GRACE_MS) {\n+    throw new Error('Pi R181 natural-exit grace was not bounded to 30 seconds');\n+  }\n+  if (boundedNaturalExitDeadline(timingOrigin + 10_000, timingOrigin) !== timingOrigin + 10_000) {\n+    throw new Error('Pi R181 natural-exit grace extended the outer deadline');\n+  }\n+  validateForcedSmokeProcess({ outputTruncated: false, cause: 'EXITED', exitCode: 0, cleanupStatus: 'NOT_REQUIRED' });\n+  let cancellationRejected = false;\n+  try {\n+    validateForcedSmokeProcess({ outputTruncated: false, cause: 'CANCELLED', exitCode: null, cleanupStatus: 'SUCCEEDED' });\n+  } catch {\n+    cancellationRejected = true;\n+  }\n+  if (!cancellationRejected) throw new Error('Pi R181 cancellation fail-closed self-test failed');\n   const openCodeConfig = buildOpenCodeR181Config(baseURL, SMOKE_FILE);\n   if (!exactOpenCodePolicy(openCodeConfig, baseURL)) throw new Error('OpenCode R181 policy self-test failed');\n \n@@ -709,9 +737,13 @@\n   ].join('\\n');\n   requireExactPiWriteEvidence(syntheticWrite);\n   for (const invalid of [\n+    '',\n     syntheticWrite.replace('\"write\",\"args\"', '\"read\",\"args\"'),\n     `${syntheticWrite}\\n${JSON.stringify({ type: 'tool_execution_start', toolCallId: 'call-2', toolName: 'write', args: {} })}`,\n+    syntheticWrite.replace('\"toolCallId\":\"call-1\",\"toolName\":\"write\",\"result\"', '\"toolCallId\":\"call-2\",\"toolName\":\"write\",\"result\"'),\n     syntheticWrite.replace('\"isError\":false', '\"isError\":true'),\n+    `${syntheticWrite}\\nnot-json`,\n+    syntheticWrite.replace(`\"provider\":\"${CANONICAL_PROVIDER}\"`, '\"provider\":\"unexpected-provider\"'),\n   ]) {\n     let rejected = false;\n     try { requireExactPiWriteEvidence(invalid); } catch { rejected = true; }\n@@ -784,7 +816,9 @@\n     arch: selected.arch,\n     outcome: 'PASS',\n     pi_max_tokens: 2048,\n-    forced_tool_choice: 'required',\n+    model_tool_choice: 'omitted',\n+    pi_tool_natural_exit_grace_ms: PI_TOOL_NATURAL_EXIT_GRACE_MS,\n+    pi_tool_smoke_timeout_ms: PI_TOOL_SMOKE_TIMEOUT_MS,\n     runtime_version_timeout_ms: RUNTIME_VERSION_TIMEOUT_MS,\n   }));\n }\n@@ -939,8 +973,8 @@\n     const piCompletionEnvRoot = join(piRoot, 'completion-environment');\n     mkdirSync(piCompletionEnvRoot, { recursive: false });\n     const piCompletionEnv = piEnvironment(piCompletionEnvRoot);\n-    const piCompletionConfig = buildPiR181Models(baseURL, false);\n-    if (!exactPiConfig(piCompletionConfig, baseURL, false)) throw new Error('Pi completion provider config drifted from Amendment 008');\n+    const piCompletionConfig = buildPiR181Models(baseURL);\n+    if (!exactPiConfig(piCompletionConfig, baseURL)) throw new Error('Pi completion provider config drifted from Amendment 008');\n     writeFileSync(join(piCompletionEnv.config, 'models.json'), `${JSON.stringify(piCompletionConfig, null, 2)}\\n`, { flag: 'wx' });\n     const piCompletionRepo = createFixtureRepo(qualificationRoot, 'pi-completion-fixture');\n     const piCompletionBefore = snapshotRepository(piCompletionRepo);\n@@ -984,8 +1018,8 @@\n     const piSmokeEnvRoot = join(piRoot, 'smoke-environment');\n     mkdirSync(piSmokeEnvRoot, { recursive: false });\n     const piSmokeEnv = piEnvironment(piSmokeEnvRoot);\n-    const piSmokeConfig = buildPiR181Models(baseURL, true);\n-    if (!exactPiConfig(piSmokeConfig, baseURL, true)) throw new Error('Pi forced-tool provider config drifted from bounded R181 posture');\n+    const piSmokeConfig = buildPiR181Models(baseURL);\n+    if (!exactPiConfig(piSmokeConfig, baseURL)) throw new Error('Pi write-smoke provider config drifted from Amendment 010');\n     writeFileSync(join(piSmokeEnv.config, 'models.json'), `${JSON.stringify(piSmokeConfig, null, 2)}\\n`, { flag: 'wx' });\n     const piSmokeRepo = createFixtureRepo(qualificationRoot, 'pi-smoke-fixture');\n     const piSmokeBefore = snapshotRepository(piSmokeRepo);\n";
 
 function gitBlobSha(source) {
@@ -30,6 +86,7 @@ function replaceSection(source, startMarker, endMarker, replacement, label) {
   return source.slice(0, start) + replacement + source.slice(end);
 }
 const lines = (values) => `${values.join('\n')}\n`;
+if (gitBlobSha(AMENDMENT_020_TEMPLATE) !== AMENDMENT_020_TEMPLATE_BLOB) throw new Error('Amendment 020 pinned template source blob drifted');
 
 function applyAmendment013(source) {
   source = replaceOnce(source, "  'runtime_release_asset_digest_metadata_exact',", "  'runtime_release_asset_public_metadata_exact',", 'public release metadata fact name');
@@ -992,11 +1049,215 @@ function applyAmendment019(source) {
   return source;
 }
 
+function applyAmendment020(source) {
+  const templateLiteral = JSON.stringify(AMENDMENT_020_TEMPLATE);
+  source = replaceOnce(source,
+    "  statSync,\n  writeFileSync,\n} from 'node:fs';",
+    "  statSync,\n  symlinkSync,\n  writeFileSync,\n} from 'node:fs';",
+    'Amendment 020 containment self-test import');
+  source = replaceOnce(source,
+    "const MAX_JSON_BYTES = 1024 * 1024;",
+    lines([
+      "const MAX_JSON_BYTES = 1024 * 1024;",
+      `const AMENDMENT_020_TEMPLATE_BLOB = '${AMENDMENT_020_TEMPLATE_BLOB}';`,
+      `const AMENDMENT_020_TEMPLATE = ${templateLiteral};`,
+      "const AMENDMENT_020_TEMPLATE_FILE = 'Qwen-Qwen2.5-7B-Instruct.jinja';",
+    ]),
+    'Amendment 020 pinned template constants');
+  source = replaceOnce(source,
+    lines(["  'server_models_endpoint_contains_exact_alias',", "  'anonymous_nonempty_model_completion',"]),
+    lines([
+      "  'server_models_endpoint_contains_exact_alias',",
+      "  'server_chat_template_exact_pinned_qwen',",
+      "  'server_chat_template_supports_tools',",
+      "  'server_chat_template_supports_tool_calls',",
+      "  'anonymous_nonempty_model_completion',",
+    ]),
+    'Amendment 020 template capability facts');
+  source = replaceOnce(source, 'function exactLoopbackV1BaseURL(baseURL) {', lines([
+    'function amendment020GitBlobSha(text) {',
+    "  if (typeof text !== 'string') throw new Error('Amendment 020 template text was invalid');",
+    "  const bytes = Buffer.from(text, 'utf8');",
+    "  return createHash('sha1').update(`blob ${bytes.length}\\0`).update(bytes).digest('hex');",
+    '}',
+    '',
+    'function validatePinnedTemplatePath(root, candidate) {',
+    "  if (!isAbsolute(root) || !isAbsolute(candidate)) throw new Error('Amendment 020 template path must be absolute');",
+    '  const stat = lstatSync(candidate);',
+    "  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Amendment 020 template must be a regular non-symlink file');",
+    "  assertInside(root, candidate, 'Amendment 020 template');",
+    "  const text = readFileSync(candidate, 'utf8');",
+    "  if (text !== AMENDMENT_020_TEMPLATE || amendment020GitBlobSha(text) !== AMENDMENT_020_TEMPLATE_BLOB) throw new Error('Amendment 020 template bytes/blob were not exact');",
+    '  return true;',
+    '}',
+    '',
+    'function writePinnedTemplate(qualificationRoot) {',
+    "  const templateRoot = join(qualificationRoot, 'amendment-020-template');",
+    '  mkdirSync(templateRoot, { recursive: false });',
+    '  const templatePath = join(templateRoot, AMENDMENT_020_TEMPLATE_FILE);',
+    "  writeFileSync(templatePath, AMENDMENT_020_TEMPLATE, { encoding: 'utf8', flag: 'wx' });",
+    '  validatePinnedTemplatePath(qualificationRoot, templatePath);',
+    '  return templatePath;',
+    '}',
+    '',
+    'function addPinnedTemplateServerArg(serverArgs, templatePath, qualificationRoot) {',
+    "  if (!Array.isArray(serverArgs) || serverArgs.some((value) => typeof value !== 'string')) throw new Error('Amendment 020 server argv was invalid');",
+    '  validatePinnedTemplatePath(qualificationRoot, templatePath);',
+    "  const jinjaIndexes = serverArgs.flatMap((value, index) => value === '--jinja' ? [index] : []);",
+    "  if (jinjaIndexes.length !== 1 || serverArgs.includes('--chat-template-file')) throw new Error('Amendment 020 server argv template boundary drifted');",
+    '  const insertAt = jinjaIndexes[0] + 1;',
+    "  const shaped = [...serverArgs.slice(0, insertAt), '--chat-template-file', templatePath, ...serverArgs.slice(insertAt)];",
+    "  const templateIndexes = shaped.flatMap((value, index) => value === '--chat-template-file' ? [index] : []);",
+    "  if (templateIndexes.length !== 1 || shaped[templateIndexes[0] + 1] !== templatePath || shaped.filter((value) => value === '--jinja').length !== 1) throw new Error('Amendment 020 server argv did not contain one exact template pair');",
+    '  const restored = [...shaped];',
+    '  restored.splice(templateIndexes[0], 2);',
+    "  if (JSON.stringify(restored) !== JSON.stringify(serverArgs)) throw new Error('Amendment 020 changed canonical server argv beyond the template pair');",
+    '  return shaped;',
+    '}',
+    '',
+    'function exactPropsEndpoint(baseURL) {',
+    '  const normalized = exactLoopbackV1BaseURL(baseURL);',
+    "  return new URL(normalized).origin + '/props';",
+    '}',
+    '',
+    'function parsePinnedTemplateProps(text, maxBytes = MAX_JSON_BYTES) {',
+    "  if (typeof text !== 'string' || !Number.isInteger(maxBytes) || maxBytes < 1 || Buffer.byteLength(text, 'utf8') > maxBytes) throw new Error('Amendment 020 props response was invalid or oversized');",
+    "  const keyCount = (key) => (text.match(new RegExp('\\\"' + key + '\\\"\\\\s*:', 'g')) ?? []).length;",
+    "  for (const key of ['chat_template', 'chat_template_caps', 'supports_tools', 'supports_tool_calls']) if (keyCount(key) !== 1) throw new Error('Amendment 020 props evidence was missing or duplicated');",
+    '  let value;',
+    "  try { value = JSON.parse(text); } catch { throw new Error('Amendment 020 props response was malformed'); }",
+    "  const plain = (candidate) => candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Object.getPrototypeOf(candidate) === Object.prototype;",
+    "  if (!plain(value) || typeof value.chat_template !== 'string' || amendment020GitBlobSha(value.chat_template) !== AMENDMENT_020_TEMPLATE_BLOB || value.chat_template !== AMENDMENT_020_TEMPLATE) throw new Error('Amendment 020 active template did not match the pinned template');",
+    '  const caps = value.chat_template_caps;',
+    "  if (!plain(caps) || caps.supports_tools !== true || caps.supports_tool_calls !== true) throw new Error('Amendment 020 tool capability attestation failed');",
+    '  return { template_exact: true, supports_tools: true, supports_tool_calls: true };',
+    '}',
+    '',
+    'function validatePropsResponseMetadata(response, endpoint) {',
+    "  if (!response || response.status !== 200 || response.redirected === true || response.url !== endpoint) throw new Error('Amendment 020 props response metadata was not exact loopback HTTP 200');",
+    "  const location = response.headers && typeof response.headers.get === 'function' ? response.headers.get('location') : null;",
+    "  if (location !== null) throw new Error('Amendment 020 props response attempted a redirect');",
+    '}',
+    '',
+    'async function attestPinnedTemplateProps(baseURL) {',
+    '  const endpoint = exactPropsEndpoint(baseURL);',
+    '  let response;',
+    '  try {',
+    "    response = await fetch(endpoint, { redirect: 'manual', signal: AbortSignal.timeout(10_000) });",
+    '  } catch (error) {',
+    "    if (failureCode(error) === 'request_timeout') throw codedFailure('request_timeout');",
+    "    throw codedFailure('loopback_transport_failure');",
+    '  }',
+    '  try { validatePropsResponseMetadata(response, endpoint); } catch { throw codedFailure(\'loopback_transport_failure\'); }',
+    '  const text = await readBoundedLlamaForcedToolStream(response);',
+    '  return parsePinnedTemplateProps(text);',
+    '}',
+    '',
+    'function exactLoopbackV1BaseURL(baseURL) {',
+  ]), 'Amendment 020 pinned template and props helpers');
+  source = replaceOnce(source,
+    "      tool_choice: 'required',\n      tools: [{",
+    "      tool_choice: 'required',\n      parallel_tool_calls: false,\n      tools: [{",
+    'Amendment 020 explicit single-call Layer-A request');
+  source = replaceOnce(source,
+    "  if (witnessRequest.body.max_tokens !== 2048) throw new Error('Amendment 019 Layer-A witness max_tokens self-test failed');",
+    lines([
+      "  if (witnessRequest.body.max_tokens !== 2048) throw new Error('Amendment 019 Layer-A witness max_tokens self-test failed');",
+      "  if (witnessRequest.body.parallel_tool_calls !== false) throw new Error('Amendment 020 Layer-A parallel_tool_calls self-test failed');",
+      "  const exactAmendment020RequestKeys = ['max_tokens','messages','model','parallel_tool_calls','stream','temperature','tool_choice','tools'];",
+      "  if (JSON.stringify(Object.keys(witnessRequest.body).sort()) !== JSON.stringify(exactAmendment020RequestKeys)) throw new Error('Amendment 020 Layer-A request changed fields beyond the explicit single-call flag');",
+      "  const witnessRuntimeSource = llamaForcedToolStreamWitness.toString();",
+      "  if ((witnessRuntimeSource.match(/AbortSignal\\.timeout\\(120_000\\)/g) ?? []).length !== 1) throw new Error('Amendment 020 Layer-A timeout drifted from 120 seconds');",
+      "  if (amendment020GitBlobSha(AMENDMENT_020_TEMPLATE) !== AMENDMENT_020_TEMPLATE_BLOB) throw new Error('Amendment 020 embedded template blob self-test failed');",
+      "  const propsEndpoint = exactPropsEndpoint(baseURL);",
+      "  if (propsEndpoint !== 'http://127.0.0.1:12345/props') throw new Error('Amendment 020 props endpoint self-test failed');",
+      "  const canonicalPropsText = JSON.stringify({ chat_template: AMENDMENT_020_TEMPLATE, chat_template_caps: { supports_tools: true, supports_tool_calls: true, supports_parallel_tool_calls: true } });",
+      "  const canonicalProps = parsePinnedTemplateProps(canonicalPropsText);",
+      "  if (JSON.stringify(Object.keys(canonicalProps).sort()) !== JSON.stringify(['supports_tool_calls','supports_tools','template_exact']) || canonicalProps.template_exact !== true || canonicalProps.supports_tools !== true || canonicalProps.supports_tool_calls !== true) throw new Error('Amendment 020 normalized props evidence self-test failed');",
+      "  const templateSentinel = AMENDMENT_020_TEMPLATE.slice(0, 48);",
+      "  if (JSON.stringify(canonicalProps).includes(templateSentinel)) throw new Error('Amendment 020 normalized props evidence leaked raw template text');",
+      "  const wrongTemplateProps = JSON.stringify({ chat_template: AMENDMENT_020_TEMPLATE + 'x', chat_template_caps: { supports_tools: true, supports_tool_calls: true } });",
+      "  const falseToolsProps = JSON.stringify({ chat_template: AMENDMENT_020_TEMPLATE, chat_template_caps: { supports_tools: false, supports_tool_calls: true } });",
+      "  const falseCallsProps = JSON.stringify({ chat_template: AMENDMENT_020_TEMPLATE, chat_template_caps: { supports_tools: true, supports_tool_calls: false } });",
+      "  const duplicateProps = canonicalPropsText.replace('{\"chat_template\":', '{\"chat_template\":' + JSON.stringify(AMENDMENT_020_TEMPLATE) + ',\"chat_template\":');",
+      "  for (const invalid of ['', '{', '{}', wrongTemplateProps, falseToolsProps, falseCallsProps, duplicateProps]) { let rejected = false; try { parsePinnedTemplateProps(invalid); } catch { rejected = true; } if (!rejected) throw new Error('Amendment 020 props fail-closed self-test failed'); }",
+      "  let propsOverflowRejected = false; try { parsePinnedTemplateProps(canonicalPropsText, Buffer.byteLength(canonicalPropsText, 'utf8') - 1); } catch { propsOverflowRejected = true; }",
+      "  if (!propsOverflowRejected) throw new Error('Amendment 020 props overflow self-test failed');",
+      "  const propsChunks = [Buffer.from(canonicalPropsText.slice(0, 17), 'utf8'), Buffer.from(canonicalPropsText.slice(17), 'utf8')];",
+      "  const propsResponse = { body: { async *[Symbol.asyncIterator]() { yield* propsChunks; } } };",
+      "  if (await readBoundedLlamaForcedToolStream(propsResponse) !== canonicalPropsText) throw new Error('Amendment 020 bounded props reader exact-body self-test failed');",
+      "  const propsOverflowResponse = { body: { async *[Symbol.asyncIterator]() { yield Buffer.alloc(MAX_JSON_BYTES); yield Buffer.from('x'); throw new Error('reader continued after overflow'); } } };",
+      "  let propsBodyOverflowRejected = false; try { await readBoundedLlamaForcedToolStream(propsOverflowResponse); } catch (error) { propsBodyOverflowRejected = failureCode(error) === 'response_overflow'; }",
+      "  if (!propsBodyOverflowRejected) throw new Error('Amendment 020 bounded props reader overflow self-test failed');",
+      "  for (const invalidURL of ['https://127.0.0.1:12345/v1', 'http://localhost:12345/v1', 'http://127.0.0.1/v1', 'http://127.0.0.1:12345/v1/', 'http://user@127.0.0.1:12345/v1', 'http://127.0.0.1:12345/v1?x=1']) { let rejected = false; try { exactPropsEndpoint(invalidURL); } catch { rejected = true; } if (!rejected) throw new Error('Amendment 020 props accepted a non-canonical loopback URL'); }",
+      "  const goodMetadata = { status: 200, redirected: false, url: propsEndpoint, headers: { get() { return null; } } };",
+      "  validatePropsResponseMetadata(goodMetadata, propsEndpoint);",
+      "  for (const invalidMetadata of [{ ...goodMetadata, status: 302 }, { ...goodMetadata, redirected: true }, { ...goodMetadata, url: 'http://127.0.0.1:12345/other' }, { ...goodMetadata, headers: { get(name) { return name === 'location' ? 'http://127.0.0.1:12345/other' : null; } } }]) { let rejected = false; try { validatePropsResponseMetadata(invalidMetadata, propsEndpoint); } catch { rejected = true; } if (!rejected) throw new Error('Amendment 020 props redirect/metadata fail-closed self-test failed'); }",
+    ]),
+    'Amendment 020 deterministic request/props self-tests');
+  source = replaceOnce(source,
+    "  const temp = mkdtempSync(join(tmpdir(), 'delethos-r181-selftest-'));\n  try {",
+    lines([
+      "  const temp = mkdtempSync(join(tmpdir(), 'delethos-r181-selftest-'));",
+      '  try {',
+      "    const pinnedTemplatePath = writePinnedTemplate(temp);",
+      "    const canonicalServerArgsSelfTest = ['--model', 'model.gguf', '--alias', CANONICAL_MODEL, '--host', '127.0.0.1', '--port', '12345', '--jinja', '--ctx-size', '16384', '--n-gpu-layers', '0', '--threads', '2', '--threads-batch', '2', '--no-webui'];",
+      "    const shapedServerArgsSelfTest = addPinnedTemplateServerArg(canonicalServerArgsSelfTest, pinnedTemplatePath, temp);",
+      "    const templateArgIndexes = shapedServerArgsSelfTest.flatMap((value, index) => value === '--chat-template-file' ? [index] : []);",
+      "    if (templateArgIndexes.length !== 1 || shapedServerArgsSelfTest[templateArgIndexes[0] + 1] !== pinnedTemplatePath || shapedServerArgsSelfTest.filter((value) => value === '--jinja').length !== 1) throw new Error('Amendment 020 server argv self-test failed');",
+      "    const restoredServerArgsSelfTest = [...shapedServerArgsSelfTest]; restoredServerArgsSelfTest.splice(templateArgIndexes[0], 2);",
+      "    if (JSON.stringify(restoredServerArgsSelfTest) !== JSON.stringify(canonicalServerArgsSelfTest)) throw new Error('Amendment 020 server argv preservation self-test failed');",
+      "    const outsideRoot = mkdtempSync(join(tmpdir(), 'delethos-r181-am020-outside-'));",
+      '    try {',
+      "      const outsideTemplate = join(outsideRoot, AMENDMENT_020_TEMPLATE_FILE);",
+      "      writeFileSync(outsideTemplate, AMENDMENT_020_TEMPLATE, { encoding: 'utf8', flag: 'wx' });",
+      "      const escapeLink = join(temp, 'am020-escape-link');",
+      "      symlinkSync(outsideRoot, escapeLink, process.platform === 'win32' ? 'junction' : 'dir');",
+      "      let escapeRejected = false; try { validatePinnedTemplatePath(temp, join(escapeLink, AMENDMENT_020_TEMPLATE_FILE)); } catch { escapeRejected = true; }",
+      "      if (!escapeRejected) throw new Error('Amendment 020 template containment self-test failed');",
+      '    } finally {',
+      '      await rm(outsideRoot, { recursive: true, force: true });',
+      '    }',
+    ]),
+    'Amendment 020 template containment and argv self-tests');
+  source = replaceOnce(source,
+    "    const port = await allocateLoopbackPort();\n    const baseURL = `http://127.0.0.1:${port}/v1`;\n    const serverArgs = [",
+    lines([
+      "    const templatePath = writePinnedTemplate(qualificationRoot);",
+      '    const port = await allocateLoopbackPort();',
+      '    const baseURL = `http://127.0.0.1:${port}/v1`;',
+      '    const canonicalServerArgs = [',
+    ]),
+    'Amendment 020 runtime template creation');
+  source = replaceOnce(source,
+    "      '--no-webui',\n    ];\n    if (serverArgs.includes('--api-key') || serverArgs.includes('--api-key-file') || serverArgs.includes('--tools') || serverArgs.includes('--agent')) {",
+    lines([
+      "      '--no-webui',",
+      '    ];',
+      '    const serverArgs = addPinnedTemplateServerArg(canonicalServerArgs, templatePath, qualificationRoot);',
+      "    if (serverArgs.includes('--api-key') || serverArgs.includes('--api-key-file') || serverArgs.includes('--tools') || serverArgs.includes('--agent')) {",
+    ]),
+    'Amendment 020 exact server argv pair');
+  source = replaceOnce(source,
+    "    mark(record, 'server_models_endpoint_contains_exact_alias');\n    await anonymousCompletion(baseURL);",
+    lines([
+      "    mark(record, 'server_models_endpoint_contains_exact_alias');",
+      '    const templateAttestation = await attestPinnedTemplateProps(baseURL);',
+      "    if (templateAttestation.template_exact !== true || templateAttestation.supports_tools !== true || templateAttestation.supports_tool_calls !== true) throw new Error('Amendment 020 template attestation was incomplete');",
+      "    mark(record, 'server_chat_template_exact_pinned_qwen');",
+      "    mark(record, 'server_chat_template_supports_tools');",
+      "    mark(record, 'server_chat_template_supports_tool_calls');",
+      '    await anonymousCompletion(baseURL);',
+    ]),
+    'Amendment 020 runtime props attestation ordering');
+  return source;
+}
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
 if (gitBlobSha(canonicalSource) !== EXPECTED_BASE_BLOB) throw new Error('R181 canonical implementation blob drifted from Amendment 013 base');
-const tempRoot = mkdtempSync(join(resolve(process.env.RUNNER_TEMP || tmpdir()), 'delethos-r181-am019-'));
+const tempRoot = mkdtempSync(join(resolve(process.env.RUNNER_TEMP || tmpdir()), 'delethos-r181-am020-'));
 const tempScripts = join(tempRoot, 'scripts');
 mkdirSync(tempScripts, { recursive: false });
 const tempImplementation = join(tempScripts, 'recovery-provider-prereq-impl.mjs');
@@ -1023,13 +1284,15 @@ try {
   const amendment018Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment019(candidateSource);
   const amendment019Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment020(candidateSource);
+  const amendment020Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_019_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_020_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
