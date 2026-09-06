@@ -1253,6 +1253,79 @@ function applyAmendment020(source) {
   return source;
 }
 
+function applyAmendment021(source) {
+  source = replaceOnce(source,
+    'function parsePinnedTemplateProps(text, maxBytes = MAX_JSON_BYTES) {',
+    lines([
+      'function amendment021NormalizeRuntimeSource(raw) {',
+      "  if (typeof raw !== 'string') throw new Error('Amendment 021 raw template source was invalid');",
+      "  if (raw.includes('\\r')) throw new Error('Amendment 021 raw template source contained CR');",
+      "  if (!raw.endsWith('\\n') || raw.endsWith('\\n\\n')) throw new Error('Amendment 021 raw template source required exactly one final LF');",
+      '  const normalized = raw.slice(0, -1);',
+      "  if (normalized.endsWith('\\n') || normalized + '\\n' !== raw) throw new Error('Amendment 021 runtime source normalization was not exact');",
+      '  return normalized;',
+      '}',
+      '',
+      'function amendment021ExpectedRuntimeSourceFromPinnedRaw(raw) {',
+      "  if (raw !== AMENDMENT_020_TEMPLATE || amendment020GitBlobSha(raw) !== AMENDMENT_020_TEMPLATE_BLOB) throw new Error('Amendment 021 pinned raw template identity drifted');",
+      '  return amendment021NormalizeRuntimeSource(raw);',
+      '}',
+      '',
+      'function amendment021ExpectedRuntimeSource() {',
+      '  return amendment021ExpectedRuntimeSourceFromPinnedRaw(AMENDMENT_020_TEMPLATE);',
+      '}',
+      '',
+      'function parsePinnedTemplateProps(text, maxBytes = MAX_JSON_BYTES) {',
+    ]),
+    'Amendment 021 runtime-source normalization helpers');
+
+  source = replaceOnce(source,
+    "  const plain = (candidate) => candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Object.getPrototypeOf(candidate) === Object.prototype;\n  if (!plain(value) || typeof value.chat_template !== 'string' || amendment020GitBlobSha(value.chat_template) !== AMENDMENT_020_TEMPLATE_BLOB || value.chat_template !== AMENDMENT_020_TEMPLATE) throw new Error('Amendment 020 active template did not match the pinned template');",
+    lines([
+      "  const plain = (candidate) => candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Object.getPrototypeOf(candidate) === Object.prototype;",
+      '  const expectedRuntimeSource = amendment021ExpectedRuntimeSource();',
+      "  if (!plain(value) || typeof value.chat_template !== 'string' || value.chat_template !== expectedRuntimeSource) throw new Error('Amendment 021 active template did not match the pinned runtime source');",
+    ]).trimEnd(),
+    'Amendment 021 runtime props source identity');
+
+  source = replaceOnce(source,
+    "  const propsEndpoint = exactPropsEndpoint(baseURL);\n  if (propsEndpoint !== 'http://127.0.0.1:12345/props') throw new Error('Amendment 020 props endpoint self-test failed');\n  const canonicalPropsText = JSON.stringify({ chat_template: AMENDMENT_020_TEMPLATE, chat_template_caps: { supports_tools: true, supports_tool_calls: true, supports_parallel_tool_calls: true } });",
+    lines([
+      "  const propsEndpoint = exactPropsEndpoint(baseURL);",
+      "  if (propsEndpoint !== 'http://127.0.0.1:12345/props') throw new Error('Amendment 020 props endpoint self-test failed');",
+      '  const amendment021RuntimeSource = amendment021ExpectedRuntimeSource();',
+      "  if (amendment021RuntimeSource !== AMENDMENT_020_TEMPLATE.slice(0, -1) || amendment021RuntimeSource + '\\n' !== AMENDMENT_020_TEMPLATE || amendment021RuntimeSource.endsWith('\\n')) throw new Error('Amendment 021 exact one-LF normalization self-test failed');",
+      "  for (const invalidRaw of [AMENDMENT_020_TEMPLATE.slice(0, -1), AMENDMENT_020_TEMPLATE + '\\n', AMENDMENT_020_TEMPLATE.replace('\\n', '\\r\\n')]) { let rejected = false; try { amendment021NormalizeRuntimeSource(invalidRaw); } catch { rejected = true; } if (!rejected) throw new Error('Amendment 021 structural normalization fail-closed self-test failed'); }",
+      "  const mutationIndex = Math.max(0, AMENDMENT_020_TEMPLATE.length - 2);",
+      "  const bodyMutation = AMENDMENT_020_TEMPLATE.slice(0, mutationIndex) + (AMENDMENT_020_TEMPLATE[mutationIndex] === 'x' ? 'y' : 'x') + AMENDMENT_020_TEMPLATE.slice(mutationIndex + 1);",
+      "  let bodyMutationRejected = false; try { amendment021ExpectedRuntimeSourceFromPinnedRaw(bodyMutation); } catch { bodyMutationRejected = true; }",
+      "  if (!bodyMutationRejected) throw new Error('Amendment 021 raw body mutation self-test failed');",
+      "  const canonicalPropsText = JSON.stringify({ chat_template: amendment021RuntimeSource, chat_template_caps: { supports_tools: true, supports_tool_calls: true, supports_parallel_tool_calls: true } });",
+    ]).trimEnd(),
+    'Amendment 021 deterministic normalization and positive props self-tests');
+
+  source = replaceOnce(source,
+    "  const templateSentinel = AMENDMENT_020_TEMPLATE.slice(0, 48);\n  if (JSON.stringify(canonicalProps).includes(templateSentinel)) throw new Error('Amendment 020 normalized props evidence leaked raw template text');\n  const wrongTemplateProps = JSON.stringify({ chat_template: AMENDMENT_020_TEMPLATE + 'x', chat_template_caps: { supports_tools: true, supports_tool_calls: true } });\n  const falseToolsProps = JSON.stringify({ chat_template: AMENDMENT_020_TEMPLATE, chat_template_caps: { supports_tools: false, supports_tool_calls: true } });\n  const falseCallsProps = JSON.stringify({ chat_template: AMENDMENT_020_TEMPLATE, chat_template_caps: { supports_tools: true, supports_tool_calls: false } });\n  const duplicateProps = canonicalPropsText.replace('{\"chat_template\":', '{\"chat_template\":' + JSON.stringify(AMENDMENT_020_TEMPLATE) + ',\"chat_template\":');\n  for (const invalid of ['', '{', '{}', wrongTemplateProps, falseToolsProps, falseCallsProps, duplicateProps]) { let rejected = false; try { parsePinnedTemplateProps(invalid); } catch { rejected = true; } if (!rejected) throw new Error('Amendment 020 props fail-closed self-test failed'); }",
+    lines([
+      "  const templateSentinel = AMENDMENT_020_TEMPLATE.slice(0, 48);",
+      "  const runtimeTemplateSentinel = amendment021RuntimeSource.slice(0, 48);",
+      "  const normalizedEvidenceText = JSON.stringify(canonicalProps);",
+      "  if (normalizedEvidenceText.includes(templateSentinel) || normalizedEvidenceText.includes(runtimeTemplateSentinel) || normalizedEvidenceText.includes(AMENDMENT_020_TEMPLATE) || normalizedEvidenceText.includes(amendment021RuntimeSource)) throw new Error('Amendment 021 normalized props evidence leaked template text');",
+      "  const rawTemplateProps = JSON.stringify({ chat_template: AMENDMENT_020_TEMPLATE, chat_template_caps: { supports_tools: true, supports_tool_calls: true } });",
+      "  const wrongTemplateProps = JSON.stringify({ chat_template: amendment021RuntimeSource + 'x', chat_template_caps: { supports_tools: true, supports_tool_calls: true } });",
+      "  const falseToolsProps = JSON.stringify({ chat_template: amendment021RuntimeSource, chat_template_caps: { supports_tools: false, supports_tool_calls: true } });",
+      "  const falseCallsProps = JSON.stringify({ chat_template: amendment021RuntimeSource, chat_template_caps: { supports_tools: true, supports_tool_calls: false } });",
+      "  const duplicateProps = canonicalPropsText.replace('{\"chat_template\":', '{\"chat_template\":' + JSON.stringify(amendment021RuntimeSource) + ',\"chat_template\":');",
+      "  for (const invalid of ['', '{', '{}', rawTemplateProps, wrongTemplateProps, falseToolsProps, falseCallsProps, duplicateProps]) { let rejected = false; try { parsePinnedTemplateProps(invalid); } catch { rejected = true; } if (!rejected) throw new Error('Amendment 021 props fail-closed self-test failed'); }",
+    ]).trimEnd(),
+    'Amendment 021 props negative controls and evidence leak boundary');
+
+  const helperCount = (source.match(/function amendment021NormalizeRuntimeSource\(/g) ?? []).length;
+  const expectedCount = (source.match(/function amendment021ExpectedRuntimeSource\(/g) ?? []).length;
+  if (helperCount !== 1 || expectedCount !== 1) throw new Error('R181 Amendment 021 transformation discriminator count drifted');
+  return source;
+}
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
@@ -1286,13 +1359,15 @@ try {
   const amendment019Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment020(candidateSource);
   const amendment020Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment021(candidateSource);
+  const amendment021Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_020_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_021_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
