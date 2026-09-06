@@ -1352,6 +1352,35 @@ function applyAmendment022(source) {
   return source;
 }
 
+function applyAmendment023(source) {
+  const originalSource = source;
+  const canonicalPrompt = String.raw`Emit no prose, reasoning, explanation, markdown, or other assistant text before the tool call. Your first emitted assistant content must be the structured write tool call. Call the write tool exactly once with path "delethos-r181-smoke.txt" and content "DELETHOS_R181_OK\n". Do not perform any other action.`;
+  const canonicalPromptSha256 = 'a80d61c9d848746309e541e01af89318925918bdd09a341d2fea5fd097c3ac4e';
+  if (Buffer.byteLength(canonicalPrompt, 'utf8') !== 307 || createHash('sha256').update(canonicalPrompt).digest('hex') !== canonicalPromptSha256 || canonicalPrompt !== canonicalPrompt.trim() || canonicalPrompt.includes('\r') || canonicalPrompt.includes('\n')) throw new Error('R181 Amendment 023 canonical prompt literal drifted');
+  const previousPromptLine = "      messages: [{ role: 'user', content: 'Call the write tool exactly once with path ' + JSON.stringify(SMOKE_FILE) + ' and content ' + JSON.stringify(SMOKE_CONTENT) + '. Do not perform any other action.' }],";
+  const promptLiteral = JSON.stringify(canonicalPrompt);
+  const exactPromptLine = `      messages: [{ role: 'user', content: ${promptLiteral} }],`;
+  const requestShapeAnchor = "  if (JSON.stringify(Object.keys(witnessRequest.body).sort()) !== JSON.stringify(exactAmendment020RequestKeys)) throw new Error('Amendment 020 Layer-A request changed fields beyond the explicit single-call flag');";
+  const requestSelfTests = lines([
+    requestShapeAnchor,
+    `  const amendment023ExpectedPrompt = ${promptLiteral};`,
+    "  const amendment023Message = witnessRequest.body.messages?.[0];",
+    "  if (!Array.isArray(witnessRequest.body.messages) || witnessRequest.body.messages.length !== 1 || !amendment023Message || JSON.stringify(Object.keys(amendment023Message).sort()) !== JSON.stringify(['content','role']) || amendment023Message.role !== 'user' || amendment023Message.content !== amendment023ExpectedPrompt) throw new Error('Amendment 023 Layer-A prompt was not exact');",
+    `  if (Buffer.byteLength(amendment023ExpectedPrompt, 'utf8') !== 307 || createHash('sha256').update(amendment023ExpectedPrompt).digest('hex') !== '${canonicalPromptSha256}' || amendment023ExpectedPrompt !== amendment023ExpectedPrompt.trim() || amendment023ExpectedPrompt.includes('\\r') || amendment023ExpectedPrompt.includes('\\n')) throw new Error('Amendment 023 Layer-A prompt UTF-8 identity drifted');`,
+    "  const amendment023PreservedRequest = { ...witnessRequest.body }; delete amendment023PreservedRequest.messages;",
+    "  const amendment023ExpectedPreservedRequest = { model: CANONICAL_MODEL, stream: true, tool_choice: 'required', parallel_tool_calls: false, tools: witnessRequest.body.tools, temperature: 0, max_tokens: 2048 };",
+    "  if (JSON.stringify(amendment023PreservedRequest) !== JSON.stringify(amendment023ExpectedPreservedRequest)) throw new Error('Amendment 023 changed a preserved Layer-A request field');",
+  ]).trimEnd();
+
+  source = replaceOnce(source, previousPromptLine, exactPromptLine, 'Amendment 023 exact Layer-A prompt');
+  source = replaceOnce(source, requestShapeAnchor, requestSelfTests, 'Amendment 023 prompt and request-preservation self-tests');
+
+  if ((source.split(exactPromptLine).length - 1) !== 1 || source.includes(previousPromptLine)) throw new Error('R181 Amendment 023 prompt replacement discriminator drifted');
+  const restored = source.replace(exactPromptLine, previousPromptLine).replace(requestSelfTests, requestShapeAnchor);
+  if (restored !== originalSource) throw new Error('R181 Amendment 023 changed generated candidate beyond the authorized prompt and self-tests');
+  return source;
+}
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
@@ -1389,13 +1418,15 @@ try {
   const amendment021Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment022(candidateSource);
   const amendment022Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment023(candidateSource);
+  const amendment023Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_022_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_022_blob: amendment022Blob, amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability+runtime-source-normalization+layer-a-timeout-budget' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_023_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_022_blob: amendment022Blob, amendment_023_blob: amendment023Blob, amendment_023_prompt_sha256: 'a80d61c9d848746309e541e01af89318925918bdd09a341d2fea5fd097c3ac4e', amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability+runtime-source-normalization+layer-a-timeout-budget+layer-a-tool-call-first-prompt' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
