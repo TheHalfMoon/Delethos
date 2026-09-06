@@ -12,7 +12,7 @@ const IMPLEMENTATION_PATH = join(SCRIPT_DIR, 'recovery-provider-prereq-impl.mjs'
 const EXPECTED_BASE_BLOB = '0027b883aa046b39ae06278ff623c3e346cd25d0';
 const EXPECTED_AMENDMENT_010_BLOB = '587e2e2e8e3b2ce485e57e4e6f43934043ba6cb2';
 const AMENDMENT_020_TEMPLATE_BLOB = 'bdf7919a96cfe43d50914a007b9c0877bd0ec27e';
-const AMENDMENT_020_TEMPLATE = `{%- if tools %}
+const AMENDMENT_020_TEMPLATE = String.raw`{%- if tools %}
     {{- '<|im_start|>system\n' }}
     {%- if messages[0]['role'] == 'system' %}
         {{- messages[0]['content'] }}
