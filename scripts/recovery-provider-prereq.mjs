@@ -1326,6 +1326,32 @@ function applyAmendment021(source) {
   return source;
 }
 
+function applyAmendment022(source) {
+  source = replaceOnce(
+    source,
+    '      signal: AbortSignal.timeout(120_000),',
+    '      signal: AbortSignal.timeout(300_000),',
+    'Amendment 022 align Layer-A request timeout');
+
+  source = replaceOnce(
+    source,
+    "  const witnessRuntimeSource = llamaForcedToolStreamWitness.toString();\n  if ((witnessRuntimeSource.match(/AbortSignal\\.timeout\\(120_000\\)/g) ?? []).length !== 1) throw new Error('Amendment 020 Layer-A timeout drifted from 120 seconds');",
+    lines([
+      '  const witnessRuntimeSource = llamaForcedToolStreamWitness.toString();',
+      "  if ((witnessRuntimeSource.match(/AbortSignal\\.timeout\\(300_000\\)/g) ?? []).length !== 1) throw new Error('Amendment 022 Layer-A timeout was not exactly 300 seconds');",
+      "  if ((witnessRuntimeSource.match(/AbortSignal\\.timeout\\(120_000\\)/g) ?? []).length !== 0) throw new Error('Amendment 022 Layer-A retained the historical 120-second timeout');",
+      "  if (PI_TOOL_SMOKE_TIMEOUT_MS !== 300_000) throw new Error('Amendment 022 Layer-A/Pi timeout budgets diverged');",
+      "  if (PI_TOOL_NATURAL_EXIT_GRACE_MS !== 30_000) throw new Error('Amendment 022 changed Pi natural-exit grace');",
+    ]).trimEnd(),
+    'Amendment 022 deterministic timeout alignment self-tests');
+
+  const witnessCount = (source.match(/async function llamaForcedToolStreamWitness\(baseURL\) \{/g) ?? []).length;
+  const alignedTimeoutCount = (source.match(/      signal: AbortSignal\.timeout\(300_000\),/g) ?? []).length;
+  const historicalTimeoutCount = (source.match(/      signal: AbortSignal\.timeout\(120_000\),/g) ?? []).length;
+  if (witnessCount !== 1 || alignedTimeoutCount !== 1 || historicalTimeoutCount !== 0) throw new Error('R181 Amendment 022 transformation discriminator count drifted');
+  return source;
+}
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
@@ -1361,13 +1387,15 @@ try {
   const amendment020Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment021(candidateSource);
   const amendment021Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment022(candidateSource);
+  const amendment022Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_021_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_022_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_022_blob: amendment022Blob, amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability+runtime-source-normalization+layer-a-timeout-budget' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
