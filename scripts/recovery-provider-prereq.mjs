@@ -1381,6 +1381,158 @@ function applyAmendment023(source) {
   return source;
 }
 
+function applyAmendment024(source) {
+  const originalSource = source;
+  const replacements = [];
+  const apply = (before, after, label) => {
+    source = replaceOnce(source, before, after, `Amendment 024 ${label}`);
+    replacements.push([before, after, label]);
+  };
+
+  const previousOpenCodeImport = lines([
+    'import {',
+    '  buildOpenCodeR181Config,',
+    '  OPENCODE_R181_MODEL_ID,',
+    '  OPENCODE_R181_PROVIDER_ID,',
+    '  runOpenCode,',
+    "} from '../packages/adapters/src/opencode.ts';",
+  ]).trimEnd();
+  const amendment024OpenCodeImport = lines([
+    'import {',
+    '  buildOpenCodeR181Config as buildAmendment008OpenCodeR181Config,',
+    '  OPENCODE_R181_PROVIDER_ID,',
+    '  runOpenCode,',
+    "} from '../packages/adapters/src/opencode.ts';",
+  ]).trimEnd();
+  apply(previousOpenCodeImport, amendment024OpenCodeImport, 'OpenCode qualification import');
+
+  apply(
+    "const CANONICAL_MODEL = 'delethos-qwen25-coder-1.5b-q4km';",
+    "const CANONICAL_MODEL = 'delethos-qwen25-instruct-1.5b-q4km';",
+    'canonical model alias');
+  apply(
+    "const RUNTIME_COMMIT = 'c1d0e7a004015f23bc0233470b747b596f29b264';",
+    lines([
+      "const RUNTIME_COMMIT = 'c1d0e7a004015f23bc0233470b747b596f29b264';",
+      "const PROVIDER_STRATEGY_ID = 'delethos-local-llama-qwen25-instruct';",
+      "const MODEL_REPOSITORY = 'Qwen/Qwen2.5-1.5B-Instruct-GGUF';",
+      "const AMENDMENT_024_RETIRED_OPENCODE_MODEL = 'delethos-qwen25-coder-1.5b-q4km';",
+      "const AMENDMENT_024_RETIRED_OPENCODE_MODEL_NAME = 'Delethos local Qwen2.5 Coder 1.5B Q4_K_M';",
+      "const AMENDMENT_024_MODEL_NAME = 'Delethos local Qwen2.5 1.5B Instruct Q4_K_M';",
+    ]).trimEnd(),
+    'strategy and repository constants');
+  apply(
+    "const MODEL_REVISION = '2ab9f8f42af02fc212effaef7c4850c885e965f4';",
+    "const MODEL_REVISION = 'a615a81362316d7b9f5a7a9c4313adfdf9b54588';",
+    'model revision');
+  apply(
+    "const MODEL_FILE = 'qwen2.5-coder-1.5b-instruct-q4_k_m.gguf';",
+    "const MODEL_FILE = 'qwen2.5-1.5b-instruct-q4_k_m.gguf';",
+    'model file');
+  apply(
+    "const MODEL_SHA256 = 'cc324af070c2ecbfd324a30884d2f951a7ff756aba85cb811a6ec436933bb046';",
+    lines([
+      "const MODEL_SHA256 = '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e';",
+      "const MODEL_DOWNLOAD_URL = 'https://huggingface.co/' + MODEL_REPOSITORY + '/resolve/' + MODEL_REVISION + '/' + MODEL_FILE + '?download=true';",
+    ]).trimEnd(),
+    'model digest and download target');
+
+  const previousOpenCodeIdentityBoundary = lines([
+    'if (OPENCODE_R181_PROVIDER_ID !== CANONICAL_PROVIDER || OPENCODE_R181_MODEL_ID !== CANONICAL_MODEL) {',
+    "  throw new Error('OpenCode R181 identity constants drifted from canonical Amendment 008');",
+    '}',
+  ]).trimEnd();
+  const amendment024OpenCodeIdentityBoundary = lines([
+    'if (OPENCODE_R181_PROVIDER_ID !== CANONICAL_PROVIDER) {',
+    "  throw new Error('OpenCode R181 provider identity constant drifted from canonical Amendment 008');",
+    '}',
+    '',
+    'function buildOpenCodeR181Config(baseURL, exactWriteTarget) {',
+    '  const base = buildAmendment008OpenCodeR181Config(baseURL, exactWriteTarget);',
+    '  const provider = base?.provider?.[CANONICAL_PROVIDER];',
+    '  const models = provider?.models;',
+    "  const modelKeys = models && typeof models === 'object' && !Array.isArray(models) ? Object.keys(models) : [];",
+    "  if (modelKeys.length !== 1 || modelKeys[0] !== AMENDMENT_024_RETIRED_OPENCODE_MODEL) throw new Error('Amendment 024 OpenCode base model identity drifted from the unchanged product adapter');",
+    '  const retired = models[AMENDMENT_024_RETIRED_OPENCODE_MODEL];',
+    "  if (!retired || typeof retired !== 'object' || Array.isArray(retired) || Object.keys(retired).length !== 1 || retired.name !== AMENDMENT_024_RETIRED_OPENCODE_MODEL_NAME) throw new Error('Amendment 024 OpenCode base model shape drifted');",
+    '  return {',
+    '    ...base,',
+    '    provider: {',
+    '      ...base.provider,',
+    '      [CANONICAL_PROVIDER]: {',
+    '        ...provider,',
+    '        models: {',
+    '          [CANONICAL_MODEL]: { ...retired, name: AMENDMENT_024_MODEL_NAME },',
+    '        },',
+    '      },',
+    '    },',
+    '  };',
+    '}',
+  ]).trimEnd();
+  apply(previousOpenCodeIdentityBoundary, amendment024OpenCodeIdentityBoundary, 'temporary OpenCode model bridge');
+
+  apply(
+    "    provider_strategy_id: 'delethos-local-llama-qwen25-coder',",
+    '    provider_strategy_id: PROVIDER_STRATEGY_ID,',
+    'provider strategy record');
+  apply(
+    "    name: 'Delethos local Qwen2.5 Coder 1.5B Q4_K_M',",
+    '    name: AMENDMENT_024_MODEL_NAME,',
+    'Pi model display identity');
+  apply(
+    '      `https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/${MODEL_REVISION}/${MODEL_FILE}?download=true`,',
+    '      MODEL_DOWNLOAD_URL,',
+    'commit-specific model download target');
+
+  const piConfigAnchor = '  const piConfig = buildPiR181Models(baseURL);';
+  const amendment024PiIdentitySelfTests = lines([
+    piConfigAnchor,
+    "  if (PROVIDER_STRATEGY_ID !== 'delethos-local-llama-qwen25-instruct' || MODEL_REPOSITORY !== 'Qwen/Qwen2.5-1.5B-Instruct-GGUF' || MODEL_REVISION !== 'a615a81362316d7b9f5a7a9c4313adfdf9b54588' || MODEL_FILE !== 'qwen2.5-1.5b-instruct-q4_k_m.gguf' || MODEL_SHA256 !== '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e' || CANONICAL_MODEL !== 'delethos-qwen25-instruct-1.5b-q4km') throw new Error('Amendment 024 replacement model identity self-test failed');",
+    "  if (RUNTIME_RELEASE !== 'b10621' || RUNTIME_COMMIT !== 'c1d0e7a004015f23bc0233470b747b596f29b264') throw new Error('Amendment 024 changed the pinned llama.cpp runtime identity');",
+    "  if (MODEL_DOWNLOAD_URL !== 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/a615a81362316d7b9f5a7a9c4313adfdf9b54588/qwen2.5-1.5b-instruct-q4_k_m.gguf?download=true') throw new Error('Amendment 024 model download target was not exact and commit-specific');",
+    "  const amendment024PiModel = piConfig?.providers?.[CANONICAL_PROVIDER]?.models?.[0];",
+    "  if (amendment024PiModel?.id !== CANONICAL_MODEL || amendment024PiModel?.name !== AMENDMENT_024_MODEL_NAME) throw new Error('Amendment 024 Pi model identity did not propagate exactly');",
+  ]).trimEnd();
+  apply(piConfigAnchor, amendment024PiIdentitySelfTests, 'model identity self-tests');
+
+  const openCodeSelfTestAnchor = lines([
+    '  const openCodeConfig = buildOpenCodeR181Config(baseURL, SMOKE_FILE);',
+    "  if (!exactOpenCodePolicy(openCodeConfig, baseURL)) throw new Error('OpenCode R181 policy self-test failed');",
+  ]).trimEnd();
+  const amendment024OpenCodeSelfTests = lines([
+    '  const openCodeConfig = buildOpenCodeR181Config(baseURL, SMOKE_FILE);',
+    "  if (!exactOpenCodePolicy(openCodeConfig, baseURL)) throw new Error('OpenCode R181 policy self-test failed');",
+    '  const amendment024BaseOpenCodeConfig = buildAmendment008OpenCodeR181Config(baseURL, SMOKE_FILE);',
+    '  const amendment024RestoredOpenCodeConfig = structuredClone(openCodeConfig);',
+    '  const amendment024ReplacementModel = amendment024RestoredOpenCodeConfig.provider[CANONICAL_PROVIDER].models[CANONICAL_MODEL];',
+    '  amendment024RestoredOpenCodeConfig.provider[CANONICAL_PROVIDER].models = {',
+    '    [AMENDMENT_024_RETIRED_OPENCODE_MODEL]: { ...amendment024ReplacementModel, name: AMENDMENT_024_RETIRED_OPENCODE_MODEL_NAME },',
+    '  };',
+    "  if (JSON.stringify(amendment024RestoredOpenCodeConfig) !== JSON.stringify(amendment024BaseOpenCodeConfig)) throw new Error('Amendment 024 OpenCode transformation changed configuration beyond model identity/name');",
+    "  if (Object.keys(openCodeConfig.provider[CANONICAL_PROVIDER].models).length !== 1 || openCodeConfig.provider[CANONICAL_PROVIDER].models[CANONICAL_MODEL]?.name !== AMENDMENT_024_MODEL_NAME || openCodeConfig.provider[CANONICAL_PROVIDER].models[AMENDMENT_024_RETIRED_OPENCODE_MODEL] !== undefined) throw new Error('Amendment 024 OpenCode replacement model identity was not exclusive');",
+  ]).trimEnd();
+  apply(openCodeSelfTestAnchor, amendment024OpenCodeSelfTests, 'OpenCode identity-only preservation self-tests');
+
+  for (const retired of [
+    'Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF',
+    '2ab9f8f42af02fc212effaef7c4850c885e965f4',
+    'qwen2.5-coder-1.5b-instruct-q4_k_m.gguf',
+    'cc324af070c2ecbfd324a30884d2f951a7ff756aba85cb811a6ec436933bb046',
+    "provider_strategy_id: 'delethos-local-llama-qwen25-coder'",
+  ]) {
+    if (source.includes(retired)) throw new Error('R181 Amendment 024 retained a retired strategy/model provenance identity');
+  }
+  if ((source.split("'delethos-qwen25-coder-1.5b-q4km'").length - 1) !== 1) throw new Error('R181 Amendment 024 retired OpenCode model alias was not confined to one bridge comparator');
+  if (!source.includes("tool_choice: 'required'") || !source.includes('parallel_tool_calls: false') || !source.includes('max_tokens: 2048') || !source.includes('AbortSignal.timeout(300_000)')) throw new Error('R181 Amendment 024 changed preserved Layer-A request semantics or timeout');
+
+  let restored = source;
+  for (const [before, after, label] of [...replacements].reverse()) {
+    restored = replaceOnce(restored, after, before, `Amendment 024 restore ${label}`);
+  }
+  if (restored !== originalSource) throw new Error('R181 Amendment 024 changed generated candidate beyond the authorized model/strategy identity and deterministic self-tests');
+  return source;
+}
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
@@ -1420,13 +1572,15 @@ try {
   const amendment022Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment023(candidateSource);
   const amendment023Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment024(candidateSource);
+  const amendment024Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_023_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_022_blob: amendment022Blob, amendment_023_blob: amendment023Blob, amendment_023_prompt_sha256: 'a80d61c9d848746309e541e01af89318925918bdd09a341d2fea5fd097c3ac4e', amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability+runtime-source-normalization+layer-a-timeout-budget+layer-a-tool-call-first-prompt' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_024_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_022_blob: amendment022Blob, amendment_023_blob: amendment023Blob, amendment_024_blob: amendment024Blob, amendment_023_prompt_sha256: 'a80d61c9d848746309e541e01af89318925918bdd09a341d2fea5fd097c3ac4e', amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, amendment_024_provider_strategy_id: 'delethos-local-llama-qwen25-instruct', amendment_024_model_repository: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', amendment_024_model_revision: 'a615a81362316d7b9f5a7a9c4313adfdf9b54588', amendment_024_model_file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', amendment_024_model_sha256: '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e', amendment_024_model_id: 'delethos-qwen25-instruct-1.5b-q4km', runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability+runtime-source-normalization+layer-a-timeout-budget+layer-a-tool-call-first-prompt+model-baseline-replacement', opencode_evidence: 'temporary-qualification-config-model-identity-only' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
