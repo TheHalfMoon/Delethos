@@ -102,6 +102,7 @@ This source evidence explains why `tool_choice = required` is not synonymous wit
 The consumed R181 strategy used:
 
 ```text
+provider_strategy_id = delethos-local-llama-qwen25-coder
 Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF
 qwen2.5-coder-1.5b-instruct-q4_k_m.gguf
 ```
@@ -112,11 +113,12 @@ This difference is shaping evidence, not a claim that an upstream test run prove
 
 A Coder-3B replacement is not selected here because the official Qwen2.5-Coder-3B model is distributed under the Qwen Research License, including a non-commercial restriction, rather than preserving the selected Apache-2.0 licensing posture. A 7B replacement would also materially increase the runner resource boundary without evidence that such an increase is necessary.
 
-## Selected replacement model
+## Selected replacement model and strategy identity
 
 The narrow replacement baseline is the official Qwen GGUF repository:
 
 ```text
+provider_strategy_id = delethos-local-llama-qwen25-instruct
 model_repository = Qwen/Qwen2.5-1.5B-Instruct-GGUF
 model_revision = a615a81362316d7b9f5a7a9c4313adfdf9b54588
 model_file = qwen2.5-1.5b-instruct-q4_k_m.gguf
@@ -125,6 +127,8 @@ model_size_bytes = 1120000000 approximately
 model_license = Apache-2.0
 server_model_alias = delethos-qwen25-instruct-1.5b-q4km
 ```
+
+The strategy identifier changes with the selected model family so that future machine evidence cannot label an Instruct-model execution as the retired Coder-model strategy. This is an identity correction coupled to the model-baseline replacement; it does not change the provider protocol, runtime, authentication posture, or tool semantics.
 
 The exact file page at the pinned revision reports SHA-256:
 
@@ -146,12 +150,11 @@ The qualification implementation must download only from the commit-specific `re
 
 ## Preserved runtime and request semantics
 
-This amendment changes the selected model baseline only. It does **not** change the runtime or Layer-A request semantics.
+This amendment changes the selected model baseline and its strategy/model identifiers only. It does **not** change the provider protocol, runtime, or Layer-A request semantics.
 
 The following remain exact:
 
 ```text
-provider_strategy_id = delethos-local-llama-qwen25-coder
 provider_protocol = OpenAI-compatible HTTP API
 provider_endpoint = loopback-only / ephemeral local port / /v1
 provider_authentication = NONE
@@ -187,14 +190,15 @@ pi = 0.84.4
 opencode = 1.18.26
 ```
 
-Their provider/model configuration must use the replacement canonical alias:
+Their provider/model configuration must use the replacement canonical identities:
 
 ```text
+provider_strategy_id = delethos-local-llama-qwen25-instruct
 provider_id = delethos-local-llama
 model_id = delethos-qwen25-instruct-1.5b-q4km
 ```
 
-No Pi/OpenCode prompt, request-shaping rule, tool allowlist, permission policy, extension boundary, natural-exit rule, executable/version pin, or evidence parser changes under this amendment except the exact selected model identity propagated into the isolated provider configuration and expected requested/observed identity.
+No Pi/OpenCode prompt, request-shaping rule, tool allowlist, permission policy, extension boundary, natural-exit rule, executable/version pin, or evidence parser changes under this amendment except the exact selected strategy/model identity propagated into the isolated provider configuration and expected requested/observed identity.
 
 Pi/OpenCode remain genuine downstream evidence boundaries. A future failure after Layer A requires its own evidence-based reconciliation and may not be preemptively widened here.
 
@@ -208,8 +212,8 @@ R181 still requires a real exact structured write. The narrower evidence-based n
 
 Before any new provider execution, self-tests must prove at minimum:
 
-1. the replacement repository, revision, filename, SHA-256, canonical alias, and commit-specific download URL are exact;
-2. the old Coder-1.5B model repository, filename, SHA-256, and model alias are absent from the generated Amendment 024 candidate where model identity is expected;
+1. the replacement strategy identifier, repository, revision, filename, SHA-256, canonical alias, and commit-specific download URL are exact;
+2. the old Coder-1.5B strategy identifier, model repository, filename, SHA-256, and model alias are absent from the generated Amendment 024 candidate where strategy/model identity is expected;
 3. the runtime release/commit and every platform runtime archive pin remain unchanged;
 4. the Amendment 020 pinned template bytes/blob and runtime-source normalization remain unchanged;
 5. the complete Amendment 023 prompt remains exact by UTF-8 byte count and SHA-256;
@@ -221,7 +225,7 @@ Before any new provider execution, self-tests must prove at minimum:
 11. malformed, duplicate, wrong, incomplete, malformed-SSE, malformed-JSON, overflow, and contradictory evidence remains FAIL;
 12. Pi provider configuration contains only the replacement provider/model identity and preserves all isolation/tool boundaries;
 13. OpenCode provider configuration contains only the replacement provider/model identity and preserves all default-deny/path/tool boundaries;
-14. transformation discriminators prove that generated candidate changes are limited to replacement model identity/provenance and the deterministic tests necessary to prove that replacement;
+14. transformation discriminators prove that generated candidate changes are limited to replacement strategy/model identity/provenance and the deterministic tests necessary to prove that replacement;
 15. workflow trigger, runner matrix, permissions, no-secret posture, runtime URLs, and all unrelated repository paths remain unchanged.
 
 These are shaping tests only and do not complete R181.
@@ -236,7 +240,7 @@ scripts/recovery-provider-prereq.mjs
 
 Within that wrapper it may only:
 
-1. replace the selected model repository/revision/file/SHA-256/commit-specific download target with the Amendment 024 values;
+1. replace the selected provider-strategy identifier and model repository/revision/file/SHA-256/commit-specific download target with the Amendment 024 values;
 2. replace the server model alias and corresponding Pi/OpenCode requested/observed model identity with `delethos-qwen25-instruct-1.5b-q4km`;
 3. add deterministic model-identity/provenance/request-preservation self-tests;
 4. add transformation discriminators proving no unrelated generated candidate section changed.
@@ -289,7 +293,7 @@ The later one-file implementation must, on one exact final head:
 3. keep provider/Gold/real-agent execution skipped on pull-request code;
 4. pass deterministic CI on Linux, macOS, and Windows;
 5. pass pre-install and post-install R181 self-tests on all required platforms;
-6. prove exact replacement model identity, SHA-256, download target, and propagated provider/model identities;
+6. prove exact replacement strategy/model identity, SHA-256, download target, and propagated provider/model identities;
 7. receive fresh independent substantive semantic/security/governance review on that exact head;
 8. reconcile all substantive findings and leave zero unresolved substantive review threads;
 9. reverify exact base/head/tree/scope/checks/reviews/threads/mergeability immediately before merge;
