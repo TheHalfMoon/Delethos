@@ -60,16 +60,13 @@ The narrowest evidence-based next diagnostic is therefore to remove ambiguity fr
 
 ## Authorized repair
 
-Only the direct Layer-A witness user-message content may change. Its one deterministic literal prompt must require all of the following:
+Only the direct Layer-A witness user-message content may change. The complete canonical UTF-8 message is exactly the following single line; the two characters `\` and `n` inside the quoted content are literal prompt characters denoting the newline required in the write argument:
 
 ```text
-- emit no prose, reasoning, explanation, markdown, or other assistant text before the tool call;
-- the first emitted assistant content must be the structured write tool call;
-- call write exactly once;
-- path must equal the existing canonical smoke path;
-- content must equal the existing canonical smoke content;
-- perform no other action.
+Emit no prose, reasoning, explanation, markdown, or other assistant text before the tool call. Your first emitted assistant content must be the structured write tool call. Call the write tool exactly once with path "delethos-r181-smoke.txt" and content "DELETHOS_R181_OK\n". Do not perform any other action.
 ```
+
+No prefix, suffix, platform variant, additional system message, alternate wording, or whitespace variation is authorized. The runner-temporary candidate must use that exact string and self-test UTF-8 equality against it.
 
 The following remain unchanged:
 
@@ -114,8 +111,8 @@ All platform archive SHA-256 pins, download URLs, llama.cpp launch flags, contex
 
 Before any new provider execution, self-tests must prove at minimum:
 
-1. exactly one deterministic Layer-A user message exists and equals the Amendment 023 literal prompt;
-2. it explicitly prohibits pre-tool prose/reasoning/text and requires the structured `write` call as first assistant output;
+1. exactly one deterministic Layer-A user message exists and equals the complete Amendment 023 UTF-8 literal above;
+2. the literal contains no leading/trailing whitespace or platform-dependent newline normalization;
 3. the request still has exactly one `write` tool with the existing exact schema;
 4. every request field other than user-message content is structurally unchanged from the Amendment 022 candidate;
 5. `max_tokens = 2048`, timeout `= 300000`, `temperature = 0`, and `parallel_tool_calls = false` remain exact;
@@ -140,7 +137,7 @@ scripts/recovery-provider-prereq.mjs
 
 Within that wrapper it may only:
 
-1. replace the direct Layer-A witness user-message content with the exact Amendment 023 prompt;
+1. replace the direct Layer-A witness user-message content with the exact Amendment 023 literal;
 2. add the deterministic prompt/request-preservation self-tests above;
 3. add transformation discriminators proving no other generated candidate section changed.
 
