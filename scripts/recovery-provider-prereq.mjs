@@ -1340,7 +1340,7 @@ function applyAmendment022(source) {
       '  const witnessRuntimeSource = llamaForcedToolStreamWitness.toString();',
       "  if ((witnessRuntimeSource.match(/AbortSignal\\.timeout\\(300_000\\)/g) ?? []).length !== 1) throw new Error('Amendment 022 Layer-A timeout was not exactly 300 seconds');",
       "  if ((witnessRuntimeSource.match(/AbortSignal\\.timeout\\(120_000\\)/g) ?? []).length !== 0) throw new Error('Amendment 022 Layer-A retained the historical 120-second timeout');",
-      "  if (PI_TOOL_SMOKE_TIMEOUT_MS !== 300_000 || !witnessRuntimeSource.includes('AbortSignal.timeout(' + String(PI_TOOL_SMOKE_TIMEOUT_MS) + ')')) throw new Error('Amendment 022 Layer-A/Pi timeout budgets diverged');",
+      "  if (PI_TOOL_SMOKE_TIMEOUT_MS !== 300_000) throw new Error('Amendment 022 Layer-A/Pi timeout budgets diverged');",
       "  if (PI_TOOL_NATURAL_EXIT_GRACE_MS !== 30_000) throw new Error('Amendment 022 changed Pi natural-exit grace');",
     ]).trimEnd(),
     'Amendment 022 deterministic timeout alignment self-tests');
