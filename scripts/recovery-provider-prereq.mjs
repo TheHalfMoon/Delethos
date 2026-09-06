@@ -1533,6 +1533,43 @@ function applyAmendment024(source) {
   return source;
 }
 
+function applyAmendment025(source) {
+  const originalSource = source;
+  const previousSuccessLiteral = '  const successLiteral = JSON.stringify(`Successfully wrote to ${SMOKE_FILE}`);';
+  const exactSuccessLiteral = "  const successLiteral = JSON.stringify(`Successfully wrote ${Buffer.byteLength(SMOKE_CONTENT, 'utf8')} bytes to ${SMOKE_FILE}`);";
+  source = replaceOnce(source, previousSuccessLiteral, exactSuccessLiteral, 'Amendment 025 exact Pi ToolResult success literal');
+
+  const previousSecondPayload = "    const secondPayload = { model: CANONICAL_MODEL, messages: [...firstPayload.messages, { role: 'assistant', content: null, tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'write', arguments: '{}' } }] }, { role: 'tool', tool_call_id: 'call-1', content: 'Successfully wrote to ' + SMOKE_FILE }], tools: [writeTool], stream: true };";
+  const exactSecondPayload = lines([
+    "    const amendment025SuccessText = `Successfully wrote ${Buffer.byteLength(SMOKE_CONTENT, 'utf8')} bytes to ${SMOKE_FILE}`;",
+    "    if (Buffer.byteLength(SMOKE_CONTENT, 'utf8') !== 17 || amendment025SuccessText !== 'Successfully wrote 17 bytes to delethos-r181-smoke.txt') throw new Error('Amendment 025 canonical Pi ToolResult literal self-test failed');",
+    "    const secondPayload = { model: CANONICAL_MODEL, messages: [...firstPayload.messages, { role: 'assistant', content: null, tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'write', arguments: '{}' } }] }, { role: 'tool', tool_call_id: 'call-1', content: amendment025SuccessText }], tools: [writeTool], stream: true };",
+  ]).trimEnd();
+  source = replaceOnce(source, previousSecondPayload, exactSecondPayload, 'Amendment 025 deterministic canonical continuation fixture');
+
+  const badContinuationAnchor = "    if (badContinuationAborts !== 1 || badSecondOutput !== badSecond) throw new Error('Pi wrong second-request continuation did not fail closed');";
+  const amendment025NegativeControls = lines([
+    badContinuationAnchor,
+    "    const amendment025InvalidResultTexts = ['Successfully wrote to ' + SMOKE_FILE, `Successfully wrote ${Buffer.byteLength(SMOKE_CONTENT, 'utf8') - 1} bytes to ${SMOKE_FILE}`, `Successfully wrote ${Buffer.byteLength(SMOKE_CONTENT, 'utf8')} bytes to wrong.txt`];",
+    '    for (let index = 0; index < amendment025InvalidResultTexts.length; index += 1) {',
+    "      const invalidResult = await loadShaper('am025-invalid-result-' + index); let invalidResultAborts = 0;",
+    '      await invalidResult.handler({ payload: firstPayload }, { abort() { invalidResultAborts += 1; } });',
+    "      const invalidSecond = { ...secondPayload, messages: secondPayload.messages.map((message) => message?.role === 'tool' ? { ...message, content: amendment025InvalidResultTexts[index] } : message) };",
+    '      const invalidOutput = await invalidResult.handler({ payload: invalidSecond }, { abort() { invalidResultAborts += 1; } });',
+    "      if (invalidResultAborts !== 1 || invalidOutput !== invalidSecond) throw new Error('Amendment 025 noncanonical Pi ToolResult text did not fail closed');",
+    '    }',
+  ]).trimEnd();
+  source = replaceOnce(source, badContinuationAnchor, amendment025NegativeControls, 'Amendment 025 deterministic noncanonical ToolResult rejection');
+
+  if ((source.split(exactSuccessLiteral).length - 1) !== 1 || source.includes(previousSuccessLiteral)) throw new Error('R181 Amendment 025 success-literal replacement discriminator drifted');
+  let restored = source;
+  restored = replaceOnce(restored, amendment025NegativeControls, badContinuationAnchor, 'Amendment 025 restore negative controls');
+  restored = replaceOnce(restored, exactSecondPayload, previousSecondPayload, 'Amendment 025 restore deterministic continuation fixture');
+  restored = replaceOnce(restored, exactSuccessLiteral, previousSuccessLiteral, 'Amendment 025 restore success literal');
+  if (restored !== originalSource) throw new Error('R181 Amendment 025 changed generated candidate beyond the authorized Pi ToolResult continuation literal and deterministic self-tests');
+  return source;
+}
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
@@ -1574,13 +1611,15 @@ try {
   const amendment023Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment024(candidateSource);
   const amendment024Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment025(candidateSource);
+  const amendment025Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_024_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_022_blob: amendment022Blob, amendment_023_blob: amendment023Blob, amendment_024_blob: amendment024Blob, amendment_023_prompt_sha256: 'a80d61c9d848746309e541e01af89318925918bdd09a341d2fea5fd097c3ac4e', amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, amendment_024_provider_strategy_id: 'delethos-local-llama-qwen25-instruct', amendment_024_model_repository: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', amendment_024_model_revision: 'a615a81362316d7b9f5a7a9c4313adfdf9b54588', amendment_024_model_file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', amendment_024_model_sha256: '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e', amendment_024_model_id: 'delethos-qwen25-instruct-1.5b-q4km', runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability+runtime-source-normalization+layer-a-timeout-budget+layer-a-tool-call-first-prompt+model-baseline-replacement', opencode_evidence: 'temporary-qualification-config-model-identity-only' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_025_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_022_blob: amendment022Blob, amendment_023_blob: amendment023Blob, amendment_024_blob: amendment024Blob, amendment_025_blob: amendment025Blob, amendment_023_prompt_sha256: 'a80d61c9d848746309e541e01af89318925918bdd09a341d2fea5fd097c3ac4e', amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, amendment_024_provider_strategy_id: 'delethos-local-llama-qwen25-instruct', amendment_024_model_repository: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', amendment_024_model_revision: 'a615a81362316d7b9f5a7a9c4313adfdf9b54588', amendment_024_model_file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', amendment_024_model_sha256: '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e', amendment_024_model_id: 'delethos-qwen25-instruct-1.5b-q4km', amendment_025_pi_toolresult_text: 'Successfully wrote 17 bytes to delethos-r181-smoke.txt', runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability+runtime-source-normalization+layer-a-timeout-budget+layer-a-tool-call-first-prompt+model-baseline-replacement+exact-toolresult-continuation', opencode_evidence: 'temporary-qualification-config-model-identity-only' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
