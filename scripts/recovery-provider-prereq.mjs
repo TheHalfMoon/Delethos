@@ -1683,7 +1683,7 @@ function applyAmendment026(source) {
     "  const amendment026InternalAssistant = amendment026Assistant('msg_internal_assistant', 'msg_compaction', { providerID: 'internal-assistant-provider-sentinel', modelID: 'internal-assistant-model-sentinel' });",
     '  const amendment026InternalEvidence = extractOpenCodeIdentity(amendment026Export([amendment026User(), amendment026Assistant(), amendment026InternalUser, amendment026InternalAssistant]), amendment026SessionID);',
     "  if (amendment026InternalEvidence.canonicalDirectChildAssistants !== 1 || amendment026InternalEvidence.internalUserMessages !== 1 || amendment026InternalEvidence.internalAssistantMessages !== 1) throw new Error('Amendment 026 internal compaction lineage positive self-test failed');",
-    "  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_assistant_bad_identity', 'msg_user', { providerID: 'wrong-provider' })]));",
+    "  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_assistant_exact'), amendment026Assistant('msg_assistant_bad_identity', 'msg_user', { providerID: 'wrong-provider' })]));",
     "  const amendment026MissingDirectIdentity = amendment026Assistant('msg_assistant_missing_identity'); delete amendment026MissingDirectIdentity.info.modelID; amendment026Reject(amendment026Export([amendment026User(), amendment026MissingDirectIdentity]));",
     '  amendment026Reject(amendment026Export([amendment026User()]));',
     "  amendment026Reject(amendment026Export([amendment026User('msg_user', { modelID: 'wrong-model' }), amendment026Assistant()]));",
