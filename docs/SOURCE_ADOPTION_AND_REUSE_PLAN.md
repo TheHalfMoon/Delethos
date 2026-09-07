@@ -8,7 +8,7 @@
 
 ## Purpose
 
-Delethos has unusually broad access to useful source implementations across coding-agent delegation, harness/runtime infrastructure, security scanning, evaluation, skill packaging, workflow orchestration, and developer UX.
+Delethos has access to useful source implementations across coding-agent delegation, harness/runtime infrastructure, security scanning, evaluation, skill packaging, workflow orchestration, and developer UX.
 
 The project should use that advantage aggressively **without becoming an incoherent fork collection**.
 
@@ -50,7 +50,7 @@ A copied implementation becomes Delethos behavior only after it is rebound to De
 
 # 1. Source Adoption Pipeline
 
-Every material reuse candidate should move through the following deterministic planning/execution stages.
+Every material reuse candidate should move through these bounded stages:
 
 ```text
 SOURCE_DISCOVERED
@@ -106,8 +106,8 @@ Candidate record:
   "adoption": {
     "mode": "ADAPTED",
     "localPaths": ["packages/..."],
-    "specification": "specs/...","
-    " "task": "...",
+    "specification": "specs/...",
+    "task": "...",
     "modifications": "bounded summary"
   },
   "verification": {
@@ -126,23 +126,22 @@ The final schema must be shaped by its owning active specification.
 
 ## Source BOM is not dependency SBOM
 
-A traditional SBOM answers what packaged dependencies are present.
-
-The Source BOM must additionally answer:
+A dependency SBOM answers what packaged dependencies are present. The Source BOM additionally answers:
 
 - what code was copied rather than installed as a dependency;
-- which upstream revision it came from;
+- which exact upstream revision/path it came from;
 - how it was modified;
 - which tests bind its retained behavior;
+- what notice/authorization evidence applies;
 - whether Delethos intentionally diverges from upstream.
 
 Both are useful and neither replaces the other.
 
 ---
 
-# 3. Third-Party Notice and Attribution Gate
+# 3. Notice and Attribution Gate
 
-When copied code requires attribution/notice retention, Delethos should fail a release/conformance gate if the Source BOM and notice surface disagree.
+When copied code requires attribution or notice retention, Delethos should fail a release/conformance gate if the Source BOM and notice surface disagree.
 
 Candidate future surfaces:
 
@@ -155,23 +154,21 @@ scripts/verify-third-party-notices.mjs
 
 These paths are placeholders, not current implementation authority.
 
-The gate should verify at minimum:
+A future gate should verify at minimum:
 
 1. every material copied unit has a Source BOM record;
 2. every required source notice is retained;
-3. local paths referenced by the record exist;
-4. source revision/path references are syntactically bounded;
-5. declared adoption mode is valid;
-6. no copied unit silently loses attribution during refactor/move;
+3. referenced local paths exist;
+4. source revision/path references are bounded;
+5. the adoption mode is valid;
+6. refactors/moves do not silently lose attribution;
 7. release packaging includes required notices.
 
 ---
 
 # 4. Copy-by-Value Rule
 
-The smallest useful source unit should be preferred.
-
-Preferred order:
+Prefer the smallest coherent source unit that materially improves Delethos.
 
 ```text
 fixture/test case
@@ -184,9 +181,7 @@ fixture/test case
   > framework
 ```
 
-Moving down the list requires stronger justification.
-
-A full donor subsystem/framework should be copied only when measured integration cost is lower than extracting the necessary primitives and when doing so does not redefine Delethos's core product boundary.
+Moving down this list requires stronger justification. A full subsystem/framework should be copied only when measured integration/maintenance cost is lower than extracting the necessary primitive and when it does not redefine Delethos's core product boundary.
 
 ---
 
@@ -198,16 +193,12 @@ For every copied/adapted unit, future implementation specs should require one or
 
 - donor tests copied verbatim where applicable;
 - donor tests translated to the Delethos stack;
-- source-derived fixtures that reproduce observed edge cases;
+- source-derived fixtures reproducing observed edge cases;
 - mutation/falsifiability checks for critical guards;
-- cross-platform cases when the source behavior is platform-sensitive;
-- negative cases for removed donor assumptions.
+- cross-platform cases for platform-sensitive behavior;
+- negative cases proving removed donor assumptions stay removed.
 
-## Important distinction
-
-A copied donor test does not automatically prove Delethos behavior.
-
-It must run against the local adapted implementation and be supplemented by Delethos contract tests where the local boundary is stronger or different.
+A donor test does not automatically prove Delethos behavior. It must run against the local adapted implementation and be supplemented by Delethos contract/security tests when the local boundary is stronger or different.
 
 ---
 
@@ -238,35 +229,19 @@ branding/product-specific paths
 
 A source-use permission does not authorize hidden behavior.
 
-Future source-adoption reviews should include an explicit `DONOR_ASSUMPTIONS_REMOVED_OR_ACCEPTED` evidence section.
+Future adoption evidence should state which donor assumptions were retained, removed, or made explicit.
 
 ---
 
 # 7. Upstream Drift Policy
 
-Copied code creates a maintenance relationship even when no package dependency exists.
+Each adopted unit must declare one maintenance policy:
 
-Each adopted unit must declare one policy:
-
-### `PINNED_NO_SYNC`
-
-The copied unit is intentionally frozen. Security issues are still monitored where material, but upstream feature drift is ignored.
-
-### `SECURITY_ONLY_RECONCILE`
-
-Only security/correctness fixes relevant to the adopted behavior are considered.
-
-### `PERIODIC_RECONCILE`
-
-Review upstream on a bounded cadence or release boundary.
-
-### `TRACK_UPSTREAM`
-
-Maintain close semantic parity because Delethos depends on matching an unstable external protocol/CLI.
-
-### `FORKED_INTENTIONALLY`
-
-The copied unit is now Delethos-native and upstream is historical provenance only.
+- `PINNED_NO_SYNC` — intentionally frozen;
+- `SECURITY_ONLY_RECONCILE` — review only relevant security/correctness fixes;
+- `PERIODIC_RECONCILE` — review upstream at a bounded cadence/release boundary;
+- `TRACK_UPSTREAM` — maintain close semantic parity because an unstable external protocol requires it;
+- `FORKED_INTENTIONALLY` — Delethos now owns the behavior and upstream is historical provenance only.
 
 The default for most reusable primitives should be `SECURITY_ONLY_RECONCILE` or `FORKED_INTENTIONALLY`, not perpetual synchronization.
 
@@ -274,11 +249,9 @@ The default for most reusable primitives should be `SECURITY_ONLY_RECONCILE` or 
 
 # 8. Capability Truth Model
 
-Source research exposed a gap in Delethos's future capability model: `SUPPORTED`/`UNAVAILABLE` alone is insufficient for ecosystem routing.
+Future ecosystem routing needs more precision than one availability/support boolean.
 
-A future capability registry should distinguish facts across separate dimensions.
-
-Candidate lifecycle:
+Candidate facts:
 
 ```text
 REGISTERED
@@ -290,29 +263,23 @@ AUTHORIZED
 QUALIFIED
 ```
 
-These are not interchangeable.
+These are separate observations, not a linear promise that every integration must reach every state.
 
 Examples:
 
-- a Codex binary may be `DISCOVERED` but not `AUTHORIZED` for a requested repository policy;
-- a Skill may be `REGISTERED` but not `SECURITY_ADMITTED`;
-- an MCP server may be `REACHABLE` but fail health/conformance;
-- an adapter can be `QUALIFIED` on Linux while `UNVERIFIED` on Windows;
-- a model/provider can be requested without being observed.
+- a CLI can be `DISCOVERED` but not `AUTHORIZED` for the requested policy;
+- a Skill can be `REGISTERED` but not security-admitted;
+- an MCP server can be `REACHABLE` but fail health/conformance;
+- an adapter can be qualified on Linux while unverified on Windows;
+- a requested provider/model does not become an observed provider/model.
 
-## Registry truth rule
-
-The capability registry may aggregate evidence, but it must not become a narrative authority.
-
-Every state transition must point to the observation/policy that justifies it.
+The registry may aggregate evidence but cannot become narrative authority. Every claimed state must point to the observation/policy that supports it.
 
 ---
 
 # 9. Canonical Source + Generated Harness Packaging
 
 Multi-harness skills/plugins should have one Delethos-owned canonical definition.
-
-Target architecture:
 
 ```text
 canonical source
@@ -326,29 +293,17 @@ canonical source
   -> generated-surface drift check
 ```
 
-## Why this matters
+This avoids safety/capability drift across hand-edited copies. Generated files are outputs of the canonical source, not independent truth.
 
-Without generation:
-
-- safety instructions drift;
-- capabilities diverge;
-- fixes land in one harness and not another;
-- provenance becomes ambiguous;
-- review cost multiplies.
-
-Generated files must be treated as products of the canonical source, not independently hand-maintained truth.
-
-## Source inspiration
-
-This direction is strongly supported by the architecture observed in `wshobson/agents` and the packaging/install surfaces in `anthropics/skills`, `vercel-labs/skills`, `delegate-skills`, and `obra/superpowers`.
+Source inspiration includes `wshobson/agents`, `anthropics/skills`, `vercel-labs/skills`, `delegate-skills`, and `obra/superpowers`.
 
 ---
 
 # 10. Durable Job Model
 
-Future review/repair/guard/security operations need a first-class job abstraction distinct from an agent session or transcript.
+Review, repair, guard, security, benchmark, and artifact operations need a first-class job abstraction distinct from one agent session/transcript.
 
-Candidate contract:
+Candidate fields:
 
 ```text
 jobId
@@ -365,7 +320,7 @@ input digest
 output/result digest
 ```
 
-Likely job kinds:
+Candidate kinds:
 
 ```text
 IMPLEMENTATION
@@ -378,37 +333,22 @@ BENCHMARK_CASE
 ARTIFACT_RENDER
 ```
 
-## Why
+A job can outlive one model response, stream output incrementally, stall/cancel independently, preserve partial evidence, and produce multiple artifacts. Deterministic core state owns the job lifecycle even when an external agent/tool performs the work.
 
-A long-running security scan, reviewer, or benchmark case may:
-
-- outlive one model response;
-- stream output incrementally;
-- stall independently;
-- be cancelled independently;
-- produce multiple artifacts;
-- fail while preserving useful partial evidence.
-
-The job abstraction should be deterministic core state even if an agent/tool performs the work.
-
-## Source inspiration
-
-DeepSeek Harness's generic long-running tool runtime demonstrates the value of explicit job output/status separation. Delethos should adapt the primitive, not adopt the whole harness.
+DeepSeek Harness is a strong implementation reference for this primitive; Delethos should adapt the useful bounded behavior rather than adopt the entire harness.
 
 ---
 
 # 11. Event Ledger and Projection Boundary
 
-Delethos already plans an `events.ndjson` evidence timeline. Future work should strengthen the distinction between **event facts** and **derived views**.
-
-Target model:
+Delethos already plans an append-oriented evidence timeline. Future work should make the event/projection separation explicit:
 
 ```text
 commands/actions
   -> validated deterministic transition
   -> append-oriented event
   -> durable run/job state
-  -> one or more projections
+  -> rebuildable projections
        TUI
        CLI summary
        GitHub check
@@ -416,26 +356,15 @@ commands/actions
        routing history
 ```
 
-A projection may be rebuilt or replaced. It cannot retroactively redefine event truth.
+A projection can be rebuilt or replaced. It cannot retroactively redefine event/evidence truth.
 
-## Benefits
-
-- crash/restart recovery;
-- debuggable orchestration;
-- reproducible UI state;
-- easier external integration;
-- less stale-memory confusion;
-- better auditability of repair/review loops.
-
-Munder Difflin and DeepSeek Harness both reinforce this direction from different product angles.
+Benefits include crash recovery, debuggability, reproducible UI state, clearer integrations, and less stale-memory confusion. DeepSeek Harness and Munder Difflin reinforce this direction from different product angles.
 
 ---
 
 # 12. Skill / Plugin / MCP Admission Pipeline
 
-A future ecosystem must distinguish **discovery** from **activation**.
-
-Target pipeline:
+Discovery is not activation.
 
 ```text
 source discovered
@@ -443,42 +372,25 @@ source discovered
   -> manifest parsed without execution
   -> content types observed
   -> provenance/license checked
-  -> permissions/capabilities extracted
+  -> requested permissions/capabilities extracted
   -> deterministic pre-scan
-  -> probabilistic advisory scan (optional)
+  -> optional probabilistic advisory scan
   -> user/policy decision
   -> installation
   -> qualified activation
 ```
 
-Untrusted Skill/MCP/plugin code must not be executed merely to discover its metadata.
+Untrusted Skill/MCP/plugin code must not execute merely to discover metadata.
 
-## Security taxonomy
+Future threat fixtures should include instruction hijacking, memory poisoning, remote payload execution, malicious embedded scripts, privilege escalation, persistence, tool spoofing, insecure dependencies, command injection, hardcoded secrets, unsafe temporary files, charset/bytecode smuggling, credential exfiltration, and malicious tool metadata.
 
-Future threat fixtures should include at least:
-
-- instruction hijacking;
-- persistent memory poisoning;
-- remote payload retrieval/execution;
-- embedded malicious scripts;
-- unauthorized access/privilege escalation;
-- system persistence;
-- tool hijacking/spoofing;
-- insecure dependencies;
-- command injection/hardcoded secrets/unsafe temporary files;
-- charset/bytecode smuggling;
-- credential exfiltration;
-- malicious tool descriptions/metadata.
-
-AI-Infra-Guard is a major source for this fixture/taxonomy work.
+AI-Infra-Guard is a major source for this taxonomy/fixture work.
 
 ---
 
 # 13. Content Observation Provider Contract
 
-Do not couple Delethos policy directly to Magika or any one detector.
-
-Shape a future provider-neutral contract first:
+Do not couple Delethos policy directly to Magika or another detector. Shape a provider-neutral contract first.
 
 ```text
 contentObservation = {
@@ -504,15 +416,13 @@ UNAVAILABLE
 FAILED
 ```
 
-Low confidence should produce generic/unknown rather than a fabricated precise classification.
-
-Magika is the leading optional provider candidate because its existing threshold/abstention behavior fits this contract well.
+Low confidence should yield generic/unknown rather than fabricated precision. Magika is the leading optional provider candidate because its threshold/abstention behavior already fits this direction.
 
 ---
 
 # 14. Security Finding Strength Model
 
-Security findings from different mechanisms must not be flattened.
+Security outputs from different mechanisms must not be flattened.
 
 Candidate evidence-strength classes:
 
@@ -524,29 +434,15 @@ PROBABILISTIC_ADVISORY
 EXTERNAL_ATTESTATION
 ```
 
-A normalized finding should preserve:
+A normalized finding should preserve finding/rule ID, severity, affected path/range, producer/version/model, configuration digest, evidence strength, reproduction artifact, status, and limitations.
 
-```text
-findingId
-rule/taxonomy id
-severity
-affected path/range
-producer
-producer version/model
-configuration digest
-evidence strength
-reproduction artifact
-status
-limitations
-```
-
-SARIF can be imported/exported as an interoperability layer, but Delethos's internal evidence model owns the proof semantics.
+SARIF can be an interoperability layer, but Delethos's evidence model owns proof semantics. An LLM/security scanner cannot self-certify a PASS.
 
 ---
 
 # 15. Security Benchmark Adoption
 
-AICGSecEval provides a useful starting point for task shape. Delethos should eventually support benchmark cases that bind:
+AICGSecEval provides a useful starting shape for security benchmark tasks. Future Delethos cases should bind:
 
 ```text
 upstream repository
@@ -562,19 +458,15 @@ raw outcome
 score derivation
 ```
 
-## Mandatory isolation rule
-
-PoCs and intentionally vulnerable code must run only in a future specification-authorized disposable environment with bounded network/filesystem/credential exposure.
-
-Never run arbitrary vulnerability PoCs against the developer host merely because a benchmark framework supports the command.
+PoCs and intentionally vulnerable code must run only in a specification-authorized disposable environment with bounded network/filesystem/credential exposure. Framework permission does not automatically establish redistribution rights for every embedded dataset, repository snapshot, container image, or model artifact.
 
 ---
 
 # 16. Visual Proof Freshness
 
-Public Delethos screenshots and evidence cards should become reproducible artifacts rather than manually refreshed marketing images.
+Public screenshots/evidence cards should become reproducible artifacts rather than manually refreshed marketing images.
 
-Future launch/docs gates should be able to bind:
+Future gates should bind:
 
 ```text
 example source
@@ -586,9 +478,7 @@ artifact digest
 README/docs reference
 ```
 
-When the authoritative example changes, stale screenshots should fail a freshness check.
-
-Diagram Design and Archify provide strong practical examples of visual/output verification discipline.
+When the authoritative example changes, stale screenshots should fail a freshness check. Diagram Design and Archify provide strong practical references for real-output verification.
 
 ---
 
@@ -600,147 +490,69 @@ This section refines program intent only. It does not activate any specification
 
 **No scope expansion from this plan.**
 
-Possible use only through a separate canonical Amendment 003 authority:
+Potential reuse requires current active authority or a separate canonical Spec 003 amendment and may include only evidence-selected items such as source-derived conformance fixtures or narrow parser/protocol logic from qualified upstream sources.
 
-- source-derived conformance fixtures from delegate-skills/upstream CLI source;
-- parser/protocol tests from Pi/OpenCode/Codex source;
-- narrow robustness fixes where exact live evidence selects them.
-
-The current R181/provider frontier remains unchanged by this plan.
+The current R181/provider/Gold frontier remains unchanged.
 
 ## Specification 004 — Independent review + repair
 
-Add during shaping:
-
-- durable `REVIEW`/`REPAIR` jobs;
-- append-oriented review events;
-- reviewer output cursors/artifacts;
-- Superpowers-derived review pressure tests;
-- exact patch-digest rebinding after repair;
-- distinct reviewer execution provenance.
+Shape durable `REVIEW`/`REPAIR` jobs, append-oriented review events, bounded reviewer artifacts/output, Superpowers-derived review pressure tests, exact patch-digest rebinding after repair, and distinct reviewer execution provenance.
 
 ## Specification 005 — Guards + proof bundle
 
-Add during shaping:
-
-- generic `GUARD` job contract;
-- Source BOM/provenance verification candidate;
-- content-observation contract;
-- normalized security finding contract;
-- security evidence-strength classes;
-- source-derived test provenance in evidence;
-- notice/SBOM consistency checks.
+Shape a generic `GUARD` job contract, Source BOM/provenance verification, content observations, normalized security findings, security evidence-strength classes, source-derived test provenance, and notice/SBOM consistency checks.
 
 ## Specification 006 — First-class UX
 
-Add during shaping:
-
-- event/projection architecture for TUI;
-- capability states beyond binary discovery;
-- bounded live job output;
-- clear `UNKNOWN/UNAVAILABLE/UNQUALIFIED` rendering;
-- reproducible evidence cards;
-- low-friction onboarding lessons from skill ecosystems without remote execution-by-discovery.
+Shape event/projection TUI architecture, capability-state rendering, bounded live job output, explicit unknown/unavailable/unqualified states, reproducible evidence cards, and low-friction onboarding without remote execution-by-discovery.
 
 ## Specification 007 — Routing + durable decisions
 
-Add during shaping:
-
-- capability registry with separate discovered/configured/reachable/healthy/authorized/qualified facts;
-- event-derived routing history;
-- durable decisions separate from projections/live repository state;
-- optional bounded declarative workflow compilation only if evidence justifies it.
+Shape a capability registry with separate discovered/configured/reachable/healthy/authorized/qualified facts, event-derived routing history, durable decisions separated from live repository/projection state, and only evidence-justified declarative workflow conveniences.
 
 ## Specification 008 — Adapter expansion
 
-Add during shaping:
-
-- delegate-skills as a source-derived compatibility corpus;
-- single canonical adapter/capability definitions;
-- generated harness/package surfaces where applicable;
-- registry drift gates;
-- source-specific conformance fixtures;
-- cross-platform verification manifests.
+Use delegate-skills and upstream CLI sources as compatibility corpora; prefer canonical definitions plus generated harness/package surfaces; add source-derived fixtures, registry drift checks, and cross-platform verification manifests.
 
 ## Specification 009 — Delethos Bench
 
-Add during shaping:
-
-- AICGSecEval-inspired security task schema;
-- source rights at artifact granularity;
-- exact base/patch/task provenance;
-- isolated functional + security execution;
-- source/provider contamination notes;
-- security benchmark track alongside reliability/review/routing tracks.
+Shape an AICGSecEval-inspired security task schema, rights/provenance at artifact granularity, exact base/patch/task identity, isolated functional/security execution, contamination notes, and a security track alongside reliability/review/routing evaluation.
 
 ## Specification 010 — Agent Skill
 
-Add during shaping:
-
-- canonical-source `SKILL.md`/plugin definition;
-- generated harness adapters;
-- Vercel/Anthropic/Superpowers/delegate-skills packaging fixtures;
-- pre-activation security admission;
-- generated-output drift checks.
+Shape one canonical Skill/plugin definition, deterministic harness generation, packaging fixtures from the qualified skill ecosystem, pre-activation security admission, and generated-output drift checks.
 
 ## Specification 011 — GitHub integration
 
-Add during shaping:
-
-- security finding/SARIF bridge;
-- evidence-card attachment/rendering;
-- event-derived check summaries;
-- source/provenance summary where copied code affects a patch.
+Shape security-finding/SARIF bridges, evidence cards, event-derived check summaries, and source/provenance summaries where material copied code affects a patch.
 
 ## Specification 012 — Ecosystem registry
 
-Add during shaping:
-
-- signed artifact/manifest provenance;
-- source BOM for community extensions;
-- capability-state registry;
-- generated harness surfaces;
-- registry drift/conformance gates;
-- install != activate distinction;
-- adapter/Skill/MCP security status.
+Shape signed artifact/manifest provenance, source records for community extensions, capability states, generated harness surfaces, registry drift/conformance gates, install-not-activation semantics, and adapter/Skill/MCP security status.
 
 ## Specification 013 — Stable v1 hardening
 
-Add during shaping:
-
-- copied-code/source-adoption audit;
-- third-party notice verification;
-- upstream security reconciliation;
-- signed registry policy;
-- provider integrity/model-substitution tests where evidence permits;
-- adversarial source/plugin/skill/MCP supply-chain tests;
-- dependency-closure and install-script hardening.
+Shape copied-code/source audits, notice verification, upstream security reconciliation, signed registry policy, provider-integrity tests where evidence permits, adversarial supply-chain tests, dependency-closure checks, and install-script hardening.
 
 ## Specification 014 — Category launch
 
-Add during shaping:
-
-- visual artifact freshness gates;
-- independent source/provenance audit instructions;
-- independently reproducible security benchmark examples;
-- public source-reuse transparency;
-- launch claims bound to canonical examples and evidence bundles.
+Shape visual artifact freshness, independent source/provenance audit instructions, reproducible security benchmark examples, public source-reuse transparency, and launch claims bound to canonical examples/evidence.
 
 ---
 
 # 18. Adoption Decision Gate
 
-A future implementation unit that proposes copying code should answer all of these before edit:
+A future implementation unit proposing copied/adapted code should answer before edit:
 
 ```text
 1. What exact problem does this source unit solve?
 2. Why copy/adapt instead of writing a smaller Delethos-native unit?
-3. What is the exact source commit and path?
+3. What is the exact source repository, commit, and path?
 4. What permission/license/notice basis applies?
 5. What is the dependency closure?
 6. What hidden donor assumptions were found?
-7. What local contract will own the adopted behavior?
-8. What source tests/fixtures travel with it?
+7. What local Delethos contract owns the behavior?
+8. What donor/source tests or fixtures travel with it?
 9. What Delethos tests make the behavior falsifiable?
 10. What security review applies?
 11. What platforms are affected?
@@ -750,31 +562,31 @@ A future implementation unit that proposes copying code should answer all of the
 15. What is explicitly not being copied?
 ```
 
-If these questions cannot be answered, the adoption unit is not ready.
+If these cannot be answered, the adoption unit is not ready.
 
 ---
 
-# 19. Highest-Priority Engineering Improvements Found
+# 19. Highest-Priority Improvements Found
 
-After re-evaluating the full source set, the most important additions to the existing Delethos plan are:
+The full source study adds these priorities to the existing program:
 
-1. **Source BOM + notice gate before substantial code copying.**
-2. **Source-derived conformance corpus** from delegate-skills and upstream CLI source.
-3. **Durable job abstraction** for review/repair/guard/security work.
-4. **Append-oriented event ledger + rebuildable projections.**
-5. **Capability-state registry** separating discovery, health, authority, and qualification.
-6. **Single canonical Skill/plugin source + generated harness adapters.**
-7. **Plugin/Skill/MCP security admission before activation.**
-8. **Content observation with confidence/abstention.**
-9. **Security evidence-strength separation and SARIF bridge.**
-10. **Repository-level security benchmark with isolated dynamic evidence.**
-11. **Signed ecosystem artifact provenance.**
-12. **Visual/public artifact freshness verification.**
-13. **Explicit upstream drift ownership for every copied unit.**
-14. **Donor-assumption stripping and dependency-closure checks.**
-15. **Pressure-tested verification/review methodology translated into deterministic policy tests.**
+1. Source BOM + notice gate before substantial copied-code adoption.
+2. Source-derived conformance corpus for coding-agent CLI edge cases.
+3. Durable jobs for review/repair/guard/security work.
+4. Append-oriented event ledger + rebuildable projections.
+5. Capability-state registry separating discovery, health, authority, and qualification.
+6. One canonical Skill/plugin source + generated harness adapters.
+7. Skill/plugin/MCP security admission before activation.
+8. Content observation with confidence/abstention.
+9. Security evidence-strength separation and SARIF bridge.
+10. Repository-level security benchmark with contained dynamic evidence.
+11. Signed ecosystem artifact provenance.
+12. Visual/public artifact freshness verification.
+13. Explicit upstream drift ownership for every copied unit.
+14. Donor-assumption stripping and dependency-closure checks.
+15. Pressure-tested verification/review methodology translated into deterministic policy/conformance tests.
 
-These improvements strengthen the existing wedge rather than creating a second product.
+These strengthen the existing verified-delegation wedge rather than creating a second product.
 
 ---
 
@@ -786,24 +598,24 @@ Even with broad reuse permission, Delethos should not become:
 - a generic swarm platform;
 - an Electron-first virtual office;
 - a mandatory cloud orchestration service;
-- a generic malware/vulnerability scanner;
+- a generic malware/vulnerability-management suite;
 - an LLM-security-opinion product;
-- an IPFS-dependent plugin marketplace;
+- an IPFS-dependent marketplace;
 - a generic workflow DSL before the verified delegation loop is excellent;
 - a fork of Codex/OpenCode/Pi/DeepSeek Harness;
-- a repository containing huge copied subsystems with no source BOM or owner.
+- a repository of huge copied subsystems with no Source BOM, tests, or owner.
 
 ---
 
 # 21. Completion Condition for This Planning Refinement
 
-This program-level refinement is complete when canonical repository truth contains:
+This refinement is complete when canonical repository truth contains:
 
 1. the Founder source-use authorization record;
 2. the source adoption matrix;
 3. this selective source adoption plan;
-4. parent-plan/roadmap links that make the plan discoverable;
+4. parent-plan/roadmap links making it discoverable;
 5. no change to active Specification 003 execution authority;
-6. qualified documentation-only merge and appropriate post-merge CI.
+6. a qualified documentation-only merge and appropriate post-merge CI.
 
 Future code adoption remains separately authorized work.
