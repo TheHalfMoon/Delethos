@@ -1570,6 +1570,149 @@ function applyAmendment025(source) {
   return source;
 }
 
+function applyAmendment026(source) {
+  const originalSource = source;
+  const previousIdentityValidator = lines([
+    'function extractOpenCodeIdentity(exportValue, sessionID) {',
+    "  if (exportValue?.info?.id !== sessionID || !Array.isArray(exportValue?.messages)) {",
+    "    throw new Error('OpenCode sanitized export session identity mismatch');",
+    '  }',
+    '  const assistant = exportValue.messages',
+    '    .map((message) => message?.info)',
+    "    .filter((info) => info?.role === 'assistant');",
+    "  if (assistant.length === 0) throw new Error('OpenCode sanitized export contained no assistant identity');",
+    '  if (assistant.some((info) => info.providerID !== CANONICAL_PROVIDER || info.modelID !== CANONICAL_MODEL)) {',
+    "    throw new Error('OpenCode sanitized export provider/model identity mismatch');",
+    '  }',
+    '  return { providerID: CANONICAL_PROVIDER, modelID: CANONICAL_MODEL, assistantMessages: assistant.length };',
+    '}',
+  ]).trimEnd();
+  const lineageIdentityValidator = lines([
+    'function extractOpenCodeIdentity(exportValue, sessionID) {',
+    "  const plain = (value) => value && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;",
+    "  if (typeof sessionID !== 'string' || sessionID.length === 0 || !plain(exportValue) || !plain(exportValue.info) || exportValue.info.id !== sessionID || !Array.isArray(exportValue.messages)) {",
+    "    throw new Error('OpenCode sanitized export session identity mismatch');",
+    '  }',
+    '  const messages = exportValue.messages;',
+    '  const byID = new Map();',
+    '  const users = [];',
+    '  const assistants = [];',
+    '  for (const message of messages) {',
+    "    if (!plain(message) || !plain(message.info) || !Array.isArray(message.parts)) throw new Error('OpenCode sanitized export contained malformed messages');",
+    '    const info = message.info;',
+    "    if (typeof info.id !== 'string' || info.id.length === 0 || info.sessionID !== sessionID || (info.role !== 'user' && info.role !== 'assistant')) throw new Error('OpenCode sanitized export contained malformed message identity');",
+    "    if (byID.has(info.id)) throw new Error('OpenCode sanitized export contained duplicate message identity');",
+    '    byID.set(info.id, info);',
+    '    for (const part of message.parts) {',
+    "      if (!plain(part) || typeof part.type !== 'string' || part.type.length === 0 || part.sessionID !== sessionID || part.messageID !== info.id) throw new Error('OpenCode sanitized export contained malformed message parts');",
+    '    }',
+    "    if (info.role === 'user') {",
+    "      if (!plain(info.model) || typeof info.model.providerID !== 'string' || info.model.providerID.length === 0 || typeof info.model.modelID !== 'string' || info.model.modelID.length === 0) throw new Error('OpenCode sanitized export contained malformed user model identity');",
+    "      users.push({ info, hasCompaction: message.parts.some((part) => part.type === 'compaction') });",
+    '      continue;',
+    '    }',
+    "    if (typeof info.parentID !== 'string' || info.parentID.length === 0 || typeof info.providerID !== 'string' || info.providerID.length === 0 || typeof info.modelID !== 'string' || info.modelID.length === 0) throw new Error('OpenCode sanitized export contained malformed assistant lineage');",
+    '    assistants.push(info);',
+    '  }',
+    '  const canonicalUsers = users.filter((entry) => !entry.hasCompaction);',
+    "  if (canonicalUsers.length !== 1) throw new Error('OpenCode sanitized export required exactly one canonical non-compaction user turn');",
+    '  const canonicalUser = canonicalUsers[0].info;',
+    '  if (canonicalUser.model.providerID !== CANONICAL_PROVIDER || canonicalUser.model.modelID !== CANONICAL_MODEL) {',
+    "    throw new Error('OpenCode sanitized export canonical user provider/model identity mismatch');",
+    '  }',
+    '  const userByID = new Map(users.map((entry) => [entry.info.id, entry]));',
+    '  let canonicalDirectChildAssistants = 0;',
+    '  let internalAssistantMessages = 0;',
+    '  for (const assistant of assistants) {',
+    '    const parent = byID.get(assistant.parentID);',
+    "    if (!parent) throw new Error('OpenCode sanitized export contained orphan assistant lineage');",
+    "    if (parent.role !== 'user') throw new Error('OpenCode sanitized export assistant parent was not a user message');",
+    '    const parentUser = userByID.get(parent.id);',
+    "    if (!parentUser) throw new Error('OpenCode sanitized export assistant lineage was not user-bound');",
+    '    if (parent.id === canonicalUser.id) {',
+    '      if (assistant.providerID !== CANONICAL_PROVIDER || assistant.modelID !== CANONICAL_MODEL) {',
+    "        throw new Error('OpenCode sanitized export canonical direct-child assistant provider/model identity mismatch');",
+    '      }',
+    '      canonicalDirectChildAssistants += 1;',
+    '      continue;',
+    '    }',
+    "    if (!parentUser.hasCompaction) throw new Error('OpenCode sanitized export unrelated assistant lineage was not internal-compaction-bound');",
+    '    internalAssistantMessages += 1;',
+    '  }',
+    "  if (canonicalDirectChildAssistants === 0) throw new Error('OpenCode sanitized export contained no canonical direct-child assistant identity');",
+    '  return {',
+    '    providerID: CANONICAL_PROVIDER,',
+    '    modelID: CANONICAL_MODEL,',
+    '    messageCount: messages.length,',
+    '    userMessages: users.length,',
+    '    assistantMessages: assistants.length,',
+    '    canonicalUserMessages: 1,',
+    '    canonicalDirectChildAssistants,',
+    '    internalUserMessages: users.length - 1,',
+    '    internalAssistantMessages,',
+    '  };',
+    '}',
+  ]).trimEnd();
+  source = replaceOnce(source, previousIdentityValidator, lineageIdentityValidator, 'Amendment 026 lineage-bound OpenCode identity validator');
+
+  const openCodeSelfTestAnchor = lines([
+    '  const openCodeConfig = buildOpenCodeR181Config(baseURL, SMOKE_FILE);',
+    "  if (!exactOpenCodePolicy(openCodeConfig, baseURL)) throw new Error('OpenCode R181 policy self-test failed');",
+    '  const amendment024BaseOpenCodeConfig = buildAmendment008OpenCodeR181Config(baseURL, SMOKE_FILE);',
+    '  const amendment024RestoredOpenCodeConfig = structuredClone(openCodeConfig);',
+    '  const amendment024ReplacementModel = amendment024RestoredOpenCodeConfig.provider[CANONICAL_PROVIDER].models[CANONICAL_MODEL];',
+    '  amendment024RestoredOpenCodeConfig.provider[CANONICAL_PROVIDER].models = {',
+    '    [AMENDMENT_024_RETIRED_OPENCODE_MODEL]: { ...amendment024ReplacementModel, name: AMENDMENT_024_RETIRED_OPENCODE_MODEL_NAME },',
+    '  };',
+    "  if (JSON.stringify(amendment024RestoredOpenCodeConfig) !== JSON.stringify(amendment024BaseOpenCodeConfig)) throw new Error('Amendment 024 OpenCode transformation changed configuration beyond model identity/name');",
+    "  if (Object.keys(openCodeConfig.provider[CANONICAL_PROVIDER].models).length !== 1 || openCodeConfig.provider[CANONICAL_PROVIDER].models[CANONICAL_MODEL]?.name !== AMENDMENT_024_MODEL_NAME || openCodeConfig.provider[CANONICAL_PROVIDER].models[AMENDMENT_024_RETIRED_OPENCODE_MODEL] !== undefined) throw new Error('Amendment 024 OpenCode replacement model identity was not exclusive');",
+  ]).trimEnd();
+  const lineageSelfTests = lines([
+    openCodeSelfTestAnchor,
+    "  const amendment026SessionID = 'ses_am026';",
+    "  const amendment026Part = (messageID, type = 'text') => ({ id: 'prt_' + messageID + '_' + type, sessionID: amendment026SessionID, messageID, type, ...(type === 'compaction' ? { auto: true } : { text: '[redacted:text]' }) });",
+    "  const amendment026User = (id = 'msg_user', options = {}) => ({ info: { id, sessionID: options.sessionID ?? amendment026SessionID, role: 'user', time: { created: 1 }, agent: 'build', model: { providerID: options.providerID ?? CANONICAL_PROVIDER, modelID: options.modelID ?? CANONICAL_MODEL }, arbitrary: 'amendment-026-transcript-sentinel' }, parts: options.compaction ? [amendment026Part(id, 'compaction')] : [amendment026Part(id)] });",
+    "  const amendment026Assistant = (id = 'msg_assistant', parentID = 'msg_user', options = {}) => ({ info: { id, sessionID: options.sessionID ?? amendment026SessionID, role: 'assistant', parentID, providerID: options.providerID ?? CANONICAL_PROVIDER, modelID: options.modelID ?? CANONICAL_MODEL, mode: 'build', agent: 'build', path: { cwd: '[redacted:cwd]', root: '[redacted:root]' }, cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }, time: { created: 2 } }, parts: [] });",
+    '  const amendment026Export = (messages, id = amendment026SessionID) => ({ info: { id }, messages });',
+    "  const amendment026Reject = (value, sessionID = amendment026SessionID) => { let rejected = false; try { extractOpenCodeIdentity(value, sessionID); } catch { rejected = true; } if (!rejected) throw new Error('Amendment 026 OpenCode lineage negative control did not fail closed'); };",
+    '  const amendment026CanonicalEvidence = extractOpenCodeIdentity(amendment026Export([amendment026User(), amendment026Assistant()]), amendment026SessionID);',
+    "  if (amendment026CanonicalEvidence.canonicalDirectChildAssistants !== 1 || amendment026CanonicalEvidence.canonicalUserMessages !== 1) throw new Error('Amendment 026 canonical lineage positive self-test failed');",
+    "  const amendment026MultipleDirectEvidence = extractOpenCodeIdentity(amendment026Export([amendment026User(), amendment026Assistant('msg_assistant_1'), amendment026Assistant('msg_assistant_2')]), amendment026SessionID);",
+    "  if (amendment026MultipleDirectEvidence.canonicalDirectChildAssistants !== 2) throw new Error('Amendment 026 multiple direct-child assistants positive self-test failed');",
+    "  const amendment026InternalUser = amendment026User('msg_compaction', { compaction: true, providerID: 'internal-user-provider-sentinel', modelID: 'internal-user-model-sentinel' });",
+    "  const amendment026InternalAssistant = amendment026Assistant('msg_internal_assistant', 'msg_compaction', { providerID: 'internal-assistant-provider-sentinel', modelID: 'internal-assistant-model-sentinel' });",
+    '  const amendment026InternalEvidence = extractOpenCodeIdentity(amendment026Export([amendment026User(), amendment026Assistant(), amendment026InternalUser, amendment026InternalAssistant]), amendment026SessionID);',
+    "  if (amendment026InternalEvidence.canonicalDirectChildAssistants !== 1 || amendment026InternalEvidence.internalUserMessages !== 1 || amendment026InternalEvidence.internalAssistantMessages !== 1) throw new Error('Amendment 026 internal compaction lineage positive self-test failed');",
+    "  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_assistant_bad_identity', 'msg_user', { providerID: 'wrong-provider' })]));",
+    "  const amendment026MissingDirectIdentity = amendment026Assistant('msg_assistant_missing_identity'); delete amendment026MissingDirectIdentity.info.modelID; amendment026Reject(amendment026Export([amendment026User(), amendment026MissingDirectIdentity]));",
+    '  amendment026Reject(amendment026Export([amendment026User()]));',
+    "  amendment026Reject(amendment026Export([amendment026User('msg_user', { modelID: 'wrong-model' }), amendment026Assistant()]));",
+    "  amendment026Reject(amendment026Export([amendment026User(), amendment026User('msg_user_2'), amendment026Assistant()]));",
+    "  amendment026Reject(amendment026Export([amendment026User('msg_user', { compaction: true }), amendment026Assistant()]));",
+    "  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_orphan', 'msg_missing_parent')]));",
+    "  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_parent_assistant'), amendment026Assistant('msg_child_assistant', 'msg_parent_assistant')]));",
+    "  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_wrong_session', 'msg_user', { sessionID: 'ses_wrong' })]));",
+    "  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant()]), 'ses_wrong_export');",
+    "  amendment026Reject({ info: { id: amendment026SessionID }, messages: 'not-an-array' });",
+    '  amendment026Reject(amendment026Export([null]));',
+    "  const amendment026DuplicateID = amendment026Assistant('msg_user'); amendment026Reject(amendment026Export([amendment026User(), amendment026DuplicateID]));",
+    "  const amendment026WrongPartSession = amendment026User(); amendment026WrongPartSession.parts[0].sessionID = 'ses_wrong'; amendment026Reject(amendment026Export([amendment026WrongPartSession, amendment026Assistant()]));",
+    "  const amendment026EvidenceKeys = ['assistantMessages','canonicalDirectChildAssistants','canonicalUserMessages','internalAssistantMessages','internalUserMessages','messageCount','modelID','providerID','userMessages'];",
+    "  if (JSON.stringify(Object.keys(amendment026InternalEvidence).sort()) !== JSON.stringify(amendment026EvidenceKeys)) throw new Error('Amendment 026 normalized evidence shape was not bounded');",
+    '  const amendment026EvidenceText = JSON.stringify(amendment026InternalEvidence);',
+    "  for (const sentinel of ['amendment-026-transcript-sentinel','internal-user-provider-sentinel','internal-user-model-sentinel','internal-assistant-provider-sentinel','internal-assistant-model-sentinel','[redacted:cwd]','[redacted:root]']) if (amendment026EvidenceText.includes(sentinel)) throw new Error('Amendment 026 normalized evidence leaked noncanonical export identity/content');",
+    "  if (amendment026InternalEvidence.providerID !== CANONICAL_PROVIDER || amendment026InternalEvidence.modelID !== CANONICAL_MODEL) throw new Error('Amendment 026 normalized evidence lost canonical identity constants');",
+  ]).trimEnd();
+  source = replaceOnce(source, openCodeSelfTestAnchor, lineageSelfTests, 'Amendment 026 deterministic OpenCode lineage self-tests');
+
+  if ((source.match(/function extractOpenCodeIdentity\(exportValue, sessionID\) \{/g) ?? []).length !== 1 || source.includes(previousIdentityValidator) || !source.includes(lineageIdentityValidator)) throw new Error('R181 Amendment 026 lineage validator transformation discriminator drifted');
+  let restored = source;
+  restored = replaceOnce(restored, lineageSelfTests, openCodeSelfTestAnchor, 'Amendment 026 restore deterministic lineage self-tests');
+  restored = replaceOnce(restored, lineageIdentityValidator, previousIdentityValidator, 'Amendment 026 restore lineage validator');
+  if (restored !== originalSource) throw new Error('R181 Amendment 026 changed generated candidate beyond the authorized OpenCode sanitized-export lineage validator and deterministic self-tests');
+  return source;
+}
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
@@ -1613,13 +1756,15 @@ try {
   const amendment024Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment025(candidateSource);
   const amendment025Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment026(candidateSource);
+  const amendment026Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_025_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_022_blob: amendment022Blob, amendment_023_blob: amendment023Blob, amendment_024_blob: amendment024Blob, amendment_025_blob: amendment025Blob, amendment_023_prompt_sha256: 'a80d61c9d848746309e541e01af89318925918bdd09a341d2fea5fd097c3ac4e', amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, amendment_024_provider_strategy_id: 'delethos-local-llama-qwen25-instruct', amendment_024_model_repository: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', amendment_024_model_revision: 'a615a81362316d7b9f5a7a9c4313adfdf9b54588', amendment_024_model_file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', amendment_024_model_sha256: '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e', amendment_024_model_id: 'delethos-qwen25-instruct-1.5b-q4km', amendment_025_pi_toolresult_text: 'Successfully wrote 17 bytes to delethos-r181-smoke.txt', runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability+runtime-source-normalization+layer-a-timeout-budget+layer-a-tool-call-first-prompt+model-baseline-replacement+exact-toolresult-continuation', opencode_evidence: 'temporary-qualification-config-model-identity-only' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_026_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_022_blob: amendment022Blob, amendment_023_blob: amendment023Blob, amendment_024_blob: amendment024Blob, amendment_025_blob: amendment025Blob, amendment_026_blob: amendment026Blob, amendment_023_prompt_sha256: 'a80d61c9d848746309e541e01af89318925918bdd09a341d2fea5fd097c3ac4e', amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, amendment_024_provider_strategy_id: 'delethos-local-llama-qwen25-instruct', amendment_024_model_repository: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', amendment_024_model_revision: 'a615a81362316d7b9f5a7a9c4313adfdf9b54588', amendment_024_model_file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', amendment_024_model_sha256: '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e', amendment_024_model_id: 'delethos-qwen25-instruct-1.5b-q4km', amendment_025_pi_toolresult_text: 'Successfully wrote 17 bytes to delethos-r181-smoke.txt', runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability+runtime-source-normalization+layer-a-timeout-budget+layer-a-tool-call-first-prompt+model-baseline-replacement+exact-toolresult-continuation', opencode_evidence: 'temporary-qualification-config-model-identity-only+sanitized-export-canonical-lineage-bound-identity' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
