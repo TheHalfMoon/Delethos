@@ -2,9 +2,15 @@
 
 This is a milestone-level view. It does **not** authorize implementation. `specs/CURRENT.md` and the active specification own execution authority.
 
+Program-level security/evaluation refinement is described in `docs/SECURITY_EVALUATION_EXPANSION_PLAN.md`. Its source qualification is recorded in `docs/research/SECURITY_CONTENT_BENCHMARK_SOURCES_2026-09-08.md`. Those documents refine future milestones only; they do not expand the active specification.
+
 ## North star
 
 > Make verified cross-agent delegation feel as normal as running tests before merge.
+
+A second long-term design objective now complements that north star:
+
+> Make security-relevant claims about AI-written patches carry explicit content, scanner, finding, dynamic-test, and benchmark provenance instead of relying on extension names, scanner summaries, or model opinion.
 
 ## Program sequence
 
@@ -13,18 +19,18 @@ This is a milestone-level view. It does **not** authorize implementation. `specs
 | 000 | Founding governance | Constitution, architecture, trust/evidence/adapter contracts, research, roadmap, contribution discipline |
 | 001 | Core state | Deterministic task/policy/run/evidence primitives |
 | 002 | Isolation & supervision | Worktree lifecycle, process ownership, cancel/timeout/stall/recovery |
-| 003 | First gold adapters | Adapter SDK plus first independently qualified real CLIs |
+| 003 | First gold adapters | Adapter SDK plus first independently qualified real CLIs; unchanged by the security/evaluation expansion plan |
 | 004 | Independent review | Distinct reviewer identity, changes-required loop, bounded repair/escalation |
-| 005 | Proof-carrying patches | Deterministic guards, scope evidence, portable verifier candidate |
-| 006 | First-class UX | `doctor`, discovery, `run`, `verify`, TUI, reproducible first useful run |
+| 005 | Guards + proof bundle | Deterministic guards, content-admission observations, normalized security findings/provenance, portable verifier candidate |
+| 006 | First-class UX | `doctor`, discovery, `run`, `verify`, TUI, reproducible first useful run with honest unknown/unavailable/security states |
 | 007 | Explainable routing | Eligibility/risk/outcome-based routing and durable non-volatile project decisions |
-| 008 | Adapter expansion | Cross-platform gold-support matrix for additional major coding agents |
-| 009 | Delethos Bench | Reproducible reliability/review/routing evaluation |
-| 010 | Agent Skill | First-class invocation from compatible coding-agent skill/plugin ecosystems |
-| 011 | GitHub integration | PR/check/evidence surfaces without GitHub becoming the only workflow |
-| 012 | Ecosystem | Adapter/plugin SDK, conformance registry, community maintenance model |
-| 013 | Stable v1 | Security/recovery hardening, stable contracts, migration/release guarantees |
-| 014 | Category launch | Validated quickstarts, independent validation, launch/discoverability readiness |
+| 008 | Adapter expansion | Cross-platform gold-support matrix for additional major coding agents with security-relevant capability truth |
+| 009 | Delethos Bench | Reproducible reliability/review/routing evaluation plus a repository-level security evaluation track |
+| 010 | Agent Skill | First-class invocation from compatible coding-agent skill/plugin ecosystems plus pre-activation security admission |
+| 011 | GitHub integration | PR/check/evidence surfaces plus bounded SARIF/security-finding interoperability without GitHub becoming the only workflow |
+| 012 | Ecosystem | Adapter/plugin/MCP/Skill SDK, conformance and security-status registry, community maintenance/provenance model |
+| 013 | Stable v1 hardening | Adversarial security/recovery hardening, provider-integrity evaluation, stable contracts, migration/release guarantees |
+| 014 | Category launch | Validated quickstarts, independent security/evidence validation, launch/discoverability readiness |
 
 ## Phase 1 — Prove the wedge
 
@@ -43,6 +49,8 @@ one bounded task
 
 This phase spans the early product specs and is the prerequisite for credible marketing.
 
+Security refinement in this phase remains narrow: content/security evidence may strengthen the guard/proof layer only after the relevant future specification explicitly authorizes it. Security breadth must not delay proving the core verified-delegation wedge.
+
 ## Phase 2 — Make it delightful
 
 After the proof semantics are real:
@@ -51,6 +59,7 @@ After the proof semantics are real:
 - fast local agent discovery;
 - high-signal TUI;
 - readable failure/recovery states;
+- readable `UNKNOWN`, `UNAVAILABLE`, `ABSTAIN`, and `NOT RUN` security/content states;
 - shareable evidence summaries;
 - straightforward adapter contribution path.
 
@@ -63,11 +72,12 @@ Only after enough reliable local evidence exists:
 - explainable routing;
 - capability/risk-aware policy;
 - measured local outcome history;
+- content/risk-aware guard and reviewer eligibility where evidence exists;
 - adaptive model/effort where provider capability is real;
 - quota/cost awareness only when observable or clearly estimated;
 - persistent durable project decisions with freshness boundaries.
 
-No opaque "AI chooses the best AI" claim without reproducible evidence.
+No opaque "AI chooses the best AI" claim without reproducible evidence. No scanner or model may self-promote into a trusted security route solely from its own output.
 
 ## Phase 4 — Make it an ecosystem
 
@@ -75,11 +85,14 @@ No opaque "AI chooses the best AI" claim without reproducible evidence.
 - conformance fixtures;
 - compatibility matrix;
 - Agent Skill/plugin packaging;
+- static pre-activation admission for third-party Skill/plugin/MCP artifacts when a future spec authorizes it;
 - GitHub integration;
+- bounded SARIF import/export for security finding interoperability;
 - community adapters/extensions;
+- security/conformance provenance registry;
 - public verifier consumption/production by third-party tools.
 
-The ecosystem succeeds when external tools can participate in Delethos contracts without adopting a Delethos cloud.
+The ecosystem succeeds when external tools can participate in Delethos contracts without adopting a Delethos cloud and without becoming trusted merely because they are installed or listed.
 
 ## Phase 5 — Make it a standard
 
@@ -93,9 +106,39 @@ delethos.run.v1
 delethos.guard-result.v1
 delethos.review.v1
 delethos.evidence.v1
+delethos.content-observation.v1
+delethos.security-finding.v1
+delethos.security-guard-result.v1
 ```
 
 Version names are placeholders until tested/stabilized by active specifications.
+
+Security-related stable surfaces must preserve evidence-strength and abstention semantics. A probabilistic detector result cannot silently become deterministic proof during serialization or interoperability export.
+
+## Security and evaluation proof spine
+
+The roadmap now reserves explicit future shaping space for:
+
+```text
+changed artifact bytes
+  -> content observation / abstention
+  -> content-appropriate guards
+  -> normalized security findings + scanner provenance
+  -> contained dynamic validation when explicitly required
+  -> independent review
+  -> proof bundle
+  -> repository-level security benchmark / independent reproduction
+```
+
+The preferred lessons from the 2026-09-08 source study are:
+
+- confidence-aware/generic/unknown content handling rather than extension-only certainty;
+- agent/Skill/MCP threat taxonomy and supply-chain admission;
+- SARIF interoperability without making SARIF the canonical evidence model;
+- repository-level CVE-like benchmark tasks with exact bases and reproducible static + dynamic evaluation;
+- explicit false-positive/false-negative and contamination/provenance reporting for security claims.
+
+The roadmap does **not** promise a specific donor dependency or code import.
 
 ## Deferred until evidence justifies them
 
@@ -109,7 +152,13 @@ Version names are placeholders until tested/stabilized by active specifications.
 - complex workflow DSL;
 - distributed task graph/swarms;
 - marketplace billing;
-- provider-agnostic external side-effect orchestration.
+- provider-agnostic external side-effect orchestration;
+- generic CVE/vulnerability-management platform;
+- hosted red-team dashboard as a core requirement;
+- mandatory ML content classifier;
+- mandatory Docker/security-lab environment for ordinary Delethos runs;
+- automatic execution of repository PoCs or untrusted Skill/MCP tools;
+- LLM-only security certification.
 
 These are not promised features.
 
@@ -120,3 +169,6 @@ These are not promised features.
 - A completed spec does not automatically activate the next number.
 - New evidence may reorder, split, replace, or remove roadmap units.
 - No roadmap unit exists merely to sustain visible activity.
+- Security breadth must not bypass the verified-delegation wedge or active task order.
+- Donor repositories are planning/provenance references until an active specification explicitly authorizes an integration.
+- A future security specification must define deterministic/probabilistic evidence boundaries, dynamic containment, privacy/secrets, provenance, negative tests, and explicit non-claims before implementation.
