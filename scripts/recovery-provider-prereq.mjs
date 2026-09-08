@@ -1902,6 +1902,211 @@ function applyAmendment029(source) {
 }
 
 
+function applyAmendment031(source) {
+  const originalSource = source;
+  const amendment028TransformationSource = applyAmendment028.toString().replace(/\r\n/g, '\n');
+  if (amendment028TransformationSource.includes('\r')) throw new Error('R181 Amendment 031 detected unsupported carriage returns in applyAmendment028 transformation');
+  if (createHash('sha256').update(amendment028TransformationSource, 'utf8').digest('hex') !== 'fd65eb23631cdef54dc23b2dffb7f12b5748841fa60915b22a27f80dbff4ef03') throw new Error('R181 Amendment 031 detected byte drift in canonical applyAmendment028 transformation');
+  const amendment029TransformationSource = applyAmendment029.toString().replace(/\r\n/g, '\n');
+  if (amendment029TransformationSource.includes('\r')) throw new Error('R181 Amendment 031 detected unsupported carriage returns in applyAmendment029 transformation');
+  if (createHash('sha256').update(amendment029TransformationSource, 'utf8').digest('hex') !== '480535c7a90761fd94313b09e54d78481279600a73d01fd286c8d793288b73af') throw new Error('R181 Amendment 031 detected byte drift in canonical applyAmendment029 transformation');
+  if (gitBlobSha(originalSource) !== '879729a6b995bb4fef7112183fc2393cd233591a') throw new Error('R181 Amendment 031 precondition failed because the generated Amendment 029 candidate blob drifted');
+
+  const amendment031FailureCodes = [
+    'pi_smoke_evidence_malformed',
+    'pi_smoke_evidence_cardinality_mismatch',
+    'pi_smoke_tool_name_mismatch',
+    'pi_smoke_argument_shape_mismatch',
+    'pi_smoke_target_content_mismatch',
+    'pi_smoke_tool_result_mismatch',
+    'pi_smoke_missing_assistant_identity',
+    'pi_smoke_assistant_identity_mismatch',
+    'pi_smoke_optional_event_cardinality_mismatch',
+    'pi_smoke_optional_start_mismatch',
+    'pi_smoke_optional_end_mismatch',
+    'smoke_fixture_snapshot_failure',
+    'smoke_fixture_repository_identity_changed',
+    'smoke_fixture_missing_target',
+    'smoke_fixture_stat_failure',
+    'smoke_fixture_nonregular_target',
+    'smoke_fixture_status_mismatch',
+    'smoke_fixture_read_failure',
+    'smoke_fixture_content_mismatch',
+    'opencode_missing_session_id',
+  ];
+  for (const code of amendment031FailureCodes) if (originalSource.includes(code)) throw new Error('R181 Amendment 031 precondition failed because generated candidate already contained a new diagnostic code');
+
+  const previousVocabularyTail = lines([
+    "  'opencode_export_missing_canonical_assistant',",
+    "  'unclassified_internal_failure',",
+  ]).trimEnd();
+  const amendment031VocabularyTail = lines([
+    "  'opencode_export_missing_canonical_assistant',",
+    ...amendment031FailureCodes.map((code) => `  '${code}',`),
+    "  'unclassified_internal_failure',",
+  ]).trimEnd();
+  source = replaceOnce(source, previousVocabularyTail, amendment031VocabularyTail, 'Amendment 031 fixed pre-mark failure vocabulary');
+
+  const piMappings = [
+    ["throw new Error('Pi write-smoke JSONL contained malformed evidence');", "throw codedFailure('pi_smoke_evidence_malformed');", 'pi_smoke_evidence_malformed'],
+    ["throw new Error('Pi write smoke required exactly one durable tool call/result; observed calls=' + evidence.toolCalls.length + ' results=' + evidence.toolResults.length);", "throw codedFailure('pi_smoke_evidence_cardinality_mismatch');", 'pi_smoke_evidence_cardinality_mismatch'],
+    ["throw new Error('Pi durable tool call was not write');", "throw codedFailure('pi_smoke_tool_name_mismatch');", 'pi_smoke_tool_name_mismatch'],
+    ["throw new Error('Pi durable write arguments did not contain exactly path/content');", "throw codedFailure('pi_smoke_argument_shape_mismatch');", 'pi_smoke_argument_shape_mismatch'],
+    ["throw new Error('Pi durable write arguments did not match the exact smoke target/content');", "throw codedFailure('pi_smoke_target_content_mismatch');", 'pi_smoke_target_content_mismatch'],
+    ["throw new Error('Pi durable tool result did not match the successful write call');", "throw codedFailure('pi_smoke_tool_result_mismatch');", 'pi_smoke_tool_result_mismatch'],
+    ["throw new Error('Pi write smoke exposed no assistant provider/model identity');", "throw codedFailure('pi_smoke_missing_assistant_identity');", 'pi_smoke_missing_assistant_identity'],
+    ["throw new Error('Pi write-smoke observed provider/model identity drifted');", "throw codedFailure('pi_smoke_assistant_identity_mismatch');", 'pi_smoke_assistant_identity_mismatch'],
+    ["throw new Error('Pi optional execution events exceeded the single durable write action');", "throw codedFailure('pi_smoke_optional_event_cardinality_mismatch');", 'pi_smoke_optional_event_cardinality_mismatch'],
+    ["throw new Error('Pi optional tool start contradicted the durable write proof');", "throw codedFailure('pi_smoke_optional_start_mismatch');", 'pi_smoke_optional_start_mismatch'],
+    ["throw new Error('Pi optional tool end contradicted the durable write proof');", "throw codedFailure('pi_smoke_optional_end_mismatch');", 'pi_smoke_optional_end_mismatch'],
+  ];
+  for (const [before, after] of piMappings) source = replaceOnce(source, before, after, 'Amendment 031 Pi fixed diagnostic mapping');
+
+  const verifyExactSmokeSource = lines([
+    'async function verifyExactSmoke(repo, before) {',
+    '  const after = snapshotRepository(repo);',
+    "  if (!repositoryIdentityUnchanged(before, after)) throw new Error('adapter changed fixture HEAD, refs, remotes, local Git config, or hooks');",
+    '  const smokePath = join(repo, SMOKE_FILE);',
+    "  if (!existsSync(smokePath)) throw new Error('adapter smoke file was not created');",
+    '  const smokeStat = lstatSync(smokePath);',
+    "  if (!smokeStat.isFile() || smokeStat.isSymbolicLink()) throw new Error('adapter smoke target was not a regular file');",
+    "  if (after.status !== `?? ${SMOKE_FILE}`) throw new Error(`unexpected fixture worktree status: ${after.status || '<clean>'}`);",
+    "  const content = await readFile(smokePath, 'utf8');",
+    "  if (content !== SMOKE_CONTENT) throw new Error('adapter smoke file bytes were not exact');",
+    '}',
+  ]).trimEnd();
+  const diagnosticSmokeHelper = lines([
+    verifyExactSmokeSource,
+    '',
+    'async function verifyExactSmokeWithDiagnostics(repo, before, operations = null) {',
+    '  const snapshot = operations?.snapshotRepository ?? snapshotRepository;',
+    '  const exists = operations?.existsSync ?? existsSync;',
+    '  const stat = operations?.lstatSync ?? lstatSync;',
+    '  const read = operations?.readFile ?? readFile;',
+    '  let after;',
+    "  try { after = snapshot(repo); } catch { throw codedFailure('smoke_fixture_snapshot_failure'); }",
+    "  if (!repositoryIdentityUnchanged(before, after)) throw codedFailure('smoke_fixture_repository_identity_changed');",
+    '  const smokePath = join(repo, SMOKE_FILE);',
+    "  if (!exists(smokePath)) throw codedFailure('smoke_fixture_missing_target');",
+    '  let smokeStat;',
+    "  try { smokeStat = stat(smokePath); } catch { throw codedFailure('smoke_fixture_stat_failure'); }",
+    "  if (!smokeStat.isFile() || smokeStat.isSymbolicLink()) throw codedFailure('smoke_fixture_nonregular_target');",
+    "  if (after.status !== `?? ${SMOKE_FILE}`) throw codedFailure('smoke_fixture_status_mismatch');",
+    '  let content;',
+    "  try { content = await read(smokePath, 'utf8'); } catch { throw codedFailure('smoke_fixture_read_failure'); }",
+    "  if (content !== SMOKE_CONTENT) throw codedFailure('smoke_fixture_content_mismatch');",
+    '}',
+  ]).trimEnd();
+  source = replaceOnce(source, verifyExactSmokeSource, diagnosticSmokeHelper, 'Amendment 031 call-site-scoped smoke diagnostic helper');
+
+  const piRuntimeBefore = lines([
+    "    mark(record, 'pi_first_request_shaper_witness_exact');",
+    '    requireExactPiWriteEvidence(piSmokeProcessResult.stdout);',
+    '    await verifyExactSmoke(piSmokeRepo, piSmokeBefore);',
+    "    mark(record, 'pi_bounded_tool_write_smoke');",
+  ]).trimEnd();
+  const piRuntimeAfter = lines([
+    "    mark(record, 'pi_first_request_shaper_witness_exact');",
+    '    requireExactPiWriteEvidence(piSmokeProcessResult.stdout);',
+    '    await verifyExactSmokeWithDiagnostics(piSmokeRepo, piSmokeBefore);',
+    "    mark(record, 'pi_bounded_tool_write_smoke');",
+  ]).trimEnd();
+  source = replaceOnce(source, piRuntimeBefore, piRuntimeAfter, 'Amendment 031 Linux Pi smoke diagnostic call site');
+
+  const openCodeRuntimeBefore = lines([
+    "    if (!opencodeResult.identity.sessionId) throw new Error('OpenCode run did not expose a session id for identity attestation');",
+    '    await verifyExactSmoke(opencodeRepo, opencodeBefore);',
+    "    mark(record, 'opencode_bounded_tool_write_smoke');",
+  ]).trimEnd();
+  const openCodeRuntimeAfter = lines([
+    "    if (!opencodeResult.identity.sessionId) throw codedFailure('opencode_missing_session_id');",
+    '    await verifyExactSmokeWithDiagnostics(opencodeRepo, opencodeBefore);',
+    "    mark(record, 'opencode_bounded_tool_write_smoke');",
+  ]).trimEnd();
+  source = replaceOnce(source, openCodeRuntimeBefore, openCodeRuntimeAfter, 'Amendment 031 pre-mark OpenCode diagnostic call site');
+
+  const selfTestAnchor = "  if (failureCode(new Error('amendment-029-unknown-exception-secret')) !== 'unclassified_internal_failure') throw new Error('Amendment 029 unknown exception did not preserve bounded fallback');";
+  const amendment031SelfTests = lines([
+    selfTestAnchor,
+    `  const amendment031FailureCodes = ${JSON.stringify(amendment031FailureCodes)};`,
+    "  for (const code of amendment031FailureCodes) { if (!FAILURE_REASON_CODES.has(code)) throw new Error('Amendment 031 fixed-code vocabulary self-test failed'); expectFixedFailure(() => { throw codedFailure(code); }, code); }",
+    "  const amendment031PiReject = (value, expectedCode) => { let observed = null; try { requireExactPiWriteEvidence(value); } catch (error) { observed = failureCode(error); } if (observed !== expectedCode) throw new Error('Amendment 031 Pi negative-control code mismatch: expected=' + expectedCode + ' observed=' + observed); };",
+    "  const amendment031PiAssistant = { type: 'message_end', message: { role: 'assistant', provider: CANONICAL_PROVIDER, model: CANONICAL_MODEL, content: [{ type: 'toolCall', id: 'am031-call', name: 'write', arguments: { path: SMOKE_FILE, content: SMOKE_CONTENT } }] } };",
+    "  const amendment031PiResult = { type: 'message_end', message: { role: 'toolResult', toolCallId: 'am031-call', toolName: 'write', content: [{ type: 'text', text: 'ok' }], isError: false, timestamp: 1 } };",
+    "  const amendment031PiSerialize = (events) => events.map((event) => typeof event === 'string' ? event : JSON.stringify(event)).join('\\n');",
+    "  const amendment031PiBadTool = structuredClone(amendment031PiAssistant); amendment031PiBadTool.message.content[0].name = 'read';",
+    "  const amendment031PiBadArgs = structuredClone(amendment031PiAssistant); amendment031PiBadArgs.message.content[0].arguments.extra = 'x';",
+    "  const amendment031PiBadTarget = structuredClone(amendment031PiAssistant); amendment031PiBadTarget.message.content[0].arguments.path = 'wrong.txt';",
+    "  const amendment031PiBadResult = structuredClone(amendment031PiResult); amendment031PiBadResult.message.isError = true;",
+    "  const amendment031PiBadIdentity = structuredClone(amendment031PiAssistant); amendment031PiBadIdentity.message.provider = 'unexpected-provider';",
+    "  amendment031PiReject(amendment031PiSerialize([amendment031PiAssistant, amendment031PiResult]) + '\\nnot-json', 'pi_smoke_evidence_malformed');",
+    "  amendment031PiReject(amendment031PiSerialize([amendment031PiAssistant, amendment031PiAssistant, amendment031PiResult]), 'pi_smoke_evidence_cardinality_mismatch');",
+    "  amendment031PiReject(amendment031PiSerialize([amendment031PiBadTool, amendment031PiResult]), 'pi_smoke_tool_name_mismatch');",
+    "  amendment031PiReject(amendment031PiSerialize([amendment031PiBadArgs, amendment031PiResult]), 'pi_smoke_argument_shape_mismatch');",
+    "  amendment031PiReject(amendment031PiSerialize([amendment031PiBadTarget, amendment031PiResult]), 'pi_smoke_target_content_mismatch');",
+    "  amendment031PiReject(amendment031PiSerialize([amendment031PiAssistant, amendment031PiBadResult]), 'pi_smoke_tool_result_mismatch');",
+    "  amendment031PiReject(amendment031PiSerialize([amendment031PiBadIdentity, amendment031PiResult]), 'pi_smoke_assistant_identity_mismatch');",
+    "  amendment031PiReject(amendment031PiSerialize([amendment031PiAssistant, { type: 'tool_execution_start', toolCallId: 'am031-call', toolName: 'write', args: {} }, { type: 'tool_execution_start', toolCallId: 'am031-call', toolName: 'write', args: {} }, amendment031PiResult]), 'pi_smoke_optional_event_cardinality_mismatch');",
+    "  amendment031PiReject(amendment031PiSerialize([amendment031PiAssistant, { type: 'tool_execution_start', toolCallId: 'wrong-call', toolName: 'write', args: {} }, amendment031PiResult]), 'pi_smoke_optional_start_mismatch');",
+    "  amendment031PiReject(amendment031PiSerialize([amendment031PiAssistant, { type: 'tool_execution_end', toolCallId: 'am031-call', toolName: 'write', result: {}, isError: true }, amendment031PiResult]), 'pi_smoke_optional_end_mismatch');",
+    "  expectFixedFailure(() => { throw codedFailure(amendment031FailureCodes[6]); }, amendment031FailureCodes[6]);",
+    "  const amendment031SmokeBefore = { head: 'head', refs: 'refs', remotes: 'remotes', gitConfigSha256: 'config', hooks: 'hooks', status: '' };",
+    "  const amendment031SmokeAfter = { ...amendment031SmokeBefore, status: `?? ${SMOKE_FILE}` };",
+    "  const amendment031SmokeOps = { snapshotRepository: () => amendment031SmokeAfter, existsSync: () => true, lstatSync: () => ({ isFile: () => true, isSymbolicLink: () => false }), readFile: async () => SMOKE_CONTENT };",
+    "  const amendment031SmokeReject = async (context, overrides, expectedCode) => { let observed = null; try { await verifyExactSmokeWithDiagnostics('/amendment-031-' + context, amendment031SmokeBefore, { ...amendment031SmokeOps, ...overrides }); } catch (error) { observed = failureCode(error); } if (observed !== expectedCode) throw new Error('Amendment 031 ' + context + ' smoke negative-control code mismatch: expected=' + expectedCode + ' observed=' + observed); };",
+    "  for (const context of ['pi','opencode']) {",
+    "    await amendment031SmokeReject(context, { snapshotRepository: () => { throw new Error('snapshot-sentinel'); } }, 'smoke_fixture_snapshot_failure');",
+    "    await amendment031SmokeReject(context, { snapshotRepository: () => ({ ...amendment031SmokeAfter, head: 'changed' }) }, 'smoke_fixture_repository_identity_changed');",
+    "    await amendment031SmokeReject(context, { existsSync: () => false }, 'smoke_fixture_missing_target');",
+    "    await amendment031SmokeReject(context, { lstatSync: () => { throw new Error('stat-sentinel'); } }, 'smoke_fixture_stat_failure');",
+    "    await amendment031SmokeReject(context, { lstatSync: () => ({ isFile: () => false, isSymbolicLink: () => false }) }, 'smoke_fixture_nonregular_target');",
+    "    await amendment031SmokeReject(context, { snapshotRepository: () => ({ ...amendment031SmokeAfter, status: 'unexpected-status-sentinel' }) }, 'smoke_fixture_status_mismatch');",
+    "    await amendment031SmokeReject(context, { readFile: async () => { throw new Error('read-sentinel'); } }, 'smoke_fixture_read_failure');",
+    "    await amendment031SmokeReject(context, { readFile: async () => 'wrong-content-sentinel' }, 'smoke_fixture_content_mismatch');",
+    "  }",
+    "  let amendment031MissingSessionObserved = null; const amendment031Identity = { sessionId: null }; try { if (!amendment031Identity.sessionId) throw codedFailure('opencode_missing_session_id'); } catch (error) { amendment031MissingSessionObserved = failureCode(error); } if (amendment031MissingSessionObserved !== 'opencode_missing_session_id') throw new Error('Amendment 031 missing-session-id fixed-code self-test failed');",
+    "  const amendment031LeakSentinels = ['Authorization: Bearer amendment-031-secret','credential=amendment-031-secret','/tmp/amendment-031-path','status-amendment-031','process-result-amendment-031','transcript-amendment-031','session-amendment-031','message-amendment-031','model-prose-amendment-031','{\\\"path\\\":\\\"tool-argument-amendment-031\\\"}'];",
+    "  for (let index = 0; index < amendment031LeakSentinels.length; index += 1) { const hostile = codedFailure(amendment031FailureCodes[index % amendment031FailureCodes.length]); hostile.message = amendment031LeakSentinels[index]; const probe = { outcome: 'FAIL', failed_at: 'amendment031', failure_reason: failureCode(hostile) }; validateFailureRecord(probe); if (JSON.stringify(probe).includes(amendment031LeakSentinels[index])) throw new Error('Amendment 031 machine record leaked untrusted diagnostic content'); }",
+    "  if (failureCode(new Error('amendment-031-unknown-exception-secret')) !== 'unclassified_internal_failure') throw new Error('Amendment 031 unknown exception did not preserve bounded fallback');",
+  ]).trimEnd();
+  source = replaceOnce(source, selfTestAnchor, amendment031SelfTests, 'Amendment 031 deterministic fixed-code, scoped-smoke, and no-leak self-tests');
+
+  const vocabularyStart = source.indexOf('const FAILURE_REASON_CODES = new Set([');
+  const vocabularyEnd = source.indexOf(']);', vocabularyStart);
+  if (vocabularyStart < 0 || vocabularyEnd <= vocabularyStart) throw new Error('R181 Amendment 031 fixed-code vocabulary boundary drifted');
+  const vocabularySource = source.slice(vocabularyStart, vocabularyEnd);
+  for (const code of amendment031FailureCodes) if ((vocabularySource.split(`'${code}',`).length - 1) !== 1) throw new Error('R181 Amendment 031 fixed code was not declared exactly once in bounded vocabulary');
+  for (const [before, after, code] of piMappings) {
+    if (source.includes(before) || (source.split(after).length - 1) !== 1 || !amendment031FailureCodes.includes(code)) throw new Error('R181 Amendment 031 Pi diagnostic boundary drifted');
+  }
+  if ((source.split(diagnosticSmokeHelper).length - 1) !== 1 || (source.split(verifyExactSmokeSource).length - 1) !== 1) throw new Error('R181 Amendment 031 exact-smoke helper or preserved original function drifted');
+  if ((source.split(piRuntimeAfter).length - 1) !== 1 || source.includes(piRuntimeBefore)) throw new Error('R181 Amendment 031 Linux Pi diagnostic call-site drifted');
+  if ((source.split(openCodeRuntimeAfter).length - 1) !== 1 || source.includes(openCodeRuntimeBefore)) throw new Error('R181 Amendment 031 pre-mark OpenCode diagnostic call-site drifted');
+  const postExportCall = lines([
+    '    extractOpenCodeIdentity(exportValue, opencodeResult.identity.sessionId);',
+    '    exportValue = null;',
+    '    await verifyExactSmoke(opencodeRepo, opencodeBefore);',
+    "    mark(record, 'opencode_sanitized_export_identity_exact');",
+  ]).trimEnd();
+  if ((source.split(postExportCall).length - 1) !== 1) throw new Error('R181 Amendment 031 changed the excluded post-export OpenCode exact-smoke call');
+  if ((source.match(/await verifyExactSmokeWithDiagnostics\(piSmokeRepo, piSmokeBefore\);/g) ?? []).length !== 1 || (source.match(/await verifyExactSmokeWithDiagnostics\(opencodeRepo, opencodeBefore\);/g) ?? []).length !== 1) throw new Error('R181 Amendment 031 diagnostic helper call-site cardinality drifted');
+  if ((source.match(/if \(!opencodeResult\.identity\.sessionId\) throw codedFailure\('opencode_missing_session_id'\);/g) ?? []).length !== 1) throw new Error('R181 Amendment 031 missing-session-id predicate drifted');
+  if ((source.match(/OPENCODE_DISABLE_AUTOCOMPACT: '1'/g) ?? []).length < 1) throw new Error('R181 Amendment 031 lost Amendment 028 autocompact isolation');
+  const amendment029Codes = ['opencode_export_invalid_json','opencode_export_session_identity_mismatch','opencode_export_malformed_messages','opencode_export_malformed_message_identity','opencode_export_duplicate_message_identity','opencode_export_malformed_message_parts','opencode_export_malformed_user_model_identity','opencode_export_canonical_user_count_mismatch','opencode_export_canonical_user_identity_mismatch','opencode_export_malformed_assistant_lineage','opencode_export_orphan_assistant_lineage','opencode_export_assistant_parent_not_user','opencode_export_assistant_not_user_bound','opencode_export_canonical_assistant_identity_mismatch','opencode_export_unrelated_assistant_not_compaction_bound','opencode_export_missing_canonical_assistant'];
+  for (const code of amendment029Codes) if (!vocabularySource.includes(`'${code}',`)) throw new Error('R181 Amendment 031 lost Amendment 029 diagnostic vocabulary');
+
+  let restored = source;
+  restored = replaceOnce(restored, amendment031SelfTests, selfTestAnchor, 'Amendment 031 restore deterministic self-tests');
+  restored = replaceOnce(restored, openCodeRuntimeAfter, openCodeRuntimeBefore, 'Amendment 031 restore pre-mark OpenCode call site');
+  restored = replaceOnce(restored, piRuntimeAfter, piRuntimeBefore, 'Amendment 031 restore Linux Pi call site');
+  restored = replaceOnce(restored, diagnosticSmokeHelper, verifyExactSmokeSource, 'Amendment 031 restore exact-smoke helper');
+  for (const [before, after] of [...piMappings].reverse()) restored = replaceOnce(restored, after, before, 'Amendment 031 restore Pi diagnostic mapping');
+  restored = replaceOnce(restored, amendment031VocabularyTail, previousVocabularyTail, 'Amendment 031 restore failure vocabulary');
+  if (restored !== originalSource) throw new Error('R181 Amendment 031 changed generated candidate beyond authorized bounded diagnostics and deterministic self-tests');
+  return source;
+}
+
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
@@ -1951,6 +2156,7 @@ try {
   const amendment028Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment029(candidateSource);
   const amendment029Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment031(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
