@@ -1783,6 +1783,125 @@ function applyAmendment028(source) {
   return source;
 }
 
+function applyAmendment029(source) {
+  const originalSource = source;
+  const amendment028TransformationSource = applyAmendment028.toString().replace(/\r\n/g, '\n');
+  if (amendment028TransformationSource.includes('\r')) throw new Error('R181 Amendment 029 detected unsupported carriage returns in applyAmendment028 transformation');
+  const amendment028TransformationSha256 = createHash('sha256').update(amendment028TransformationSource, 'utf8').digest('hex');
+  if (amendment028TransformationSha256 !== 'fd65eb23631cdef54dc23b2dffb7f12b5748841fa60915b22a27f80dbff4ef03') throw new Error('R181 Amendment 029 detected byte drift in canonical applyAmendment028 transformation');
+
+  const amendment029FailureCodes = [
+    'opencode_export_invalid_json',
+    'opencode_export_session_identity_mismatch',
+    'opencode_export_malformed_messages',
+    'opencode_export_malformed_message_identity',
+    'opencode_export_duplicate_message_identity',
+    'opencode_export_malformed_message_parts',
+    'opencode_export_malformed_user_model_identity',
+    'opencode_export_canonical_user_count_mismatch',
+    'opencode_export_canonical_user_identity_mismatch',
+    'opencode_export_malformed_assistant_lineage',
+    'opencode_export_orphan_assistant_lineage',
+    'opencode_export_assistant_parent_not_user',
+    'opencode_export_assistant_not_user_bound',
+    'opencode_export_canonical_assistant_identity_mismatch',
+    'opencode_export_unrelated_assistant_not_compaction_bound',
+    'opencode_export_missing_canonical_assistant',
+  ];
+  for (const code of amendment029FailureCodes) if (originalSource.includes(code)) throw new Error('R181 Amendment 029 precondition failed because generated candidate already contained a new diagnostic code');
+
+  const previousVocabularyTail = lines([
+    "  'canonical_repository_cleanup_failure',",
+    "  'unclassified_internal_failure',",
+  ]).trimEnd();
+  const amendment029VocabularyTail = lines([
+    "  'canonical_repository_cleanup_failure',",
+    ...amendment029FailureCodes.map((code) => `  '${code}',`),
+    "  'unclassified_internal_failure',",
+  ]).trimEnd();
+  source = replaceOnce(source, previousVocabularyTail, amendment029VocabularyTail, 'Amendment 029 fixed OpenCode export failure vocabulary');
+
+  const jsonParseBefore = "    try { exportValue = JSON.parse(exported.stdout); } catch { throw new Error('OpenCode sanitized export was not valid JSON'); }";
+  const jsonParseAfter = "    try { exportValue = JSON.parse(exported.stdout); } catch { throw codedFailure('opencode_export_invalid_json'); }";
+  source = replaceOnce(source, jsonParseBefore, jsonParseAfter, 'Amendment 029 malformed sanitized-export JSON code');
+
+  const rejectionMappings = [
+    ["throw new Error('OpenCode sanitized export session identity mismatch');", "throw codedFailure('opencode_export_session_identity_mismatch');", 'opencode_export_session_identity_mismatch'],
+    ["throw new Error('OpenCode sanitized export contained malformed messages');", "throw codedFailure('opencode_export_malformed_messages');", 'opencode_export_malformed_messages'],
+    ["throw new Error('OpenCode sanitized export contained malformed message identity');", "throw codedFailure('opencode_export_malformed_message_identity');", 'opencode_export_malformed_message_identity'],
+    ["throw new Error('OpenCode sanitized export contained duplicate message identity');", "throw codedFailure('opencode_export_duplicate_message_identity');", 'opencode_export_duplicate_message_identity'],
+    ["throw new Error('OpenCode sanitized export contained malformed message parts');", "throw codedFailure('opencode_export_malformed_message_parts');", 'opencode_export_malformed_message_parts'],
+    ["throw new Error('OpenCode sanitized export contained malformed user model identity');", "throw codedFailure('opencode_export_malformed_user_model_identity');", 'opencode_export_malformed_user_model_identity'],
+    ["throw new Error('OpenCode sanitized export required exactly one canonical non-compaction user turn');", "throw codedFailure('opencode_export_canonical_user_count_mismatch');", 'opencode_export_canonical_user_count_mismatch'],
+    ["throw new Error('OpenCode sanitized export canonical user provider/model identity mismatch');", "throw codedFailure('opencode_export_canonical_user_identity_mismatch');", 'opencode_export_canonical_user_identity_mismatch'],
+    ["throw new Error('OpenCode sanitized export contained malformed assistant lineage');", "throw codedFailure('opencode_export_malformed_assistant_lineage');", 'opencode_export_malformed_assistant_lineage'],
+    ["throw new Error('OpenCode sanitized export contained orphan assistant lineage');", "throw codedFailure('opencode_export_orphan_assistant_lineage');", 'opencode_export_orphan_assistant_lineage'],
+    ["throw new Error('OpenCode sanitized export assistant parent was not a user message');", "throw codedFailure('opencode_export_assistant_parent_not_user');", 'opencode_export_assistant_parent_not_user'],
+    ["throw new Error('OpenCode sanitized export assistant lineage was not user-bound');", "throw codedFailure('opencode_export_assistant_not_user_bound');", 'opencode_export_assistant_not_user_bound'],
+    ["throw new Error('OpenCode sanitized export canonical direct-child assistant provider/model identity mismatch');", "throw codedFailure('opencode_export_canonical_assistant_identity_mismatch');", 'opencode_export_canonical_assistant_identity_mismatch'],
+    ["throw new Error('OpenCode sanitized export unrelated assistant lineage was not internal-compaction-bound');", "throw codedFailure('opencode_export_unrelated_assistant_not_compaction_bound');", 'opencode_export_unrelated_assistant_not_compaction_bound'],
+    ["throw new Error('OpenCode sanitized export contained no canonical direct-child assistant identity');", "throw codedFailure('opencode_export_missing_canonical_assistant');", 'opencode_export_missing_canonical_assistant'],
+  ];
+  for (const [before, after] of rejectionMappings) source = replaceOnce(source, before, after, 'Amendment 029 lineage rejection fixed code');
+
+  const rejectHelperBefore = "  const amendment026Reject = (value, sessionID = amendment026SessionID) => { let rejected = false; try { extractOpenCodeIdentity(value, sessionID); } catch { rejected = true; } if (!rejected) throw new Error('Amendment 026 OpenCode lineage negative control did not fail closed'); };";
+  const rejectHelperAfter = "  const amendment026Reject = (value, expectedCode, sessionID = amendment026SessionID) => { let observed = null; try { extractOpenCodeIdentity(value, sessionID); } catch (error) { observed = failureCode(error); } if (observed !== expectedCode) throw new Error('Amendment 029 OpenCode lineage negative-control code mismatch'); };";
+  source = replaceOnce(source, rejectHelperBefore, rejectHelperAfter, 'Amendment 029 exact negative-control code helper');
+
+  const fixtureMappings = [
+    ["  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_assistant_exact'), amendment026Assistant('msg_assistant_bad_identity', 'msg_user', { providerID: 'wrong-provider' })]));", "  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_assistant_exact'), amendment026Assistant('msg_assistant_bad_identity', 'msg_user', { providerID: 'wrong-provider' })]), 'opencode_export_canonical_assistant_identity_mismatch');"],
+    ["  const amendment026MissingDirectIdentity = amendment026Assistant('msg_assistant_missing_identity'); delete amendment026MissingDirectIdentity.info.modelID; amendment026Reject(amendment026Export([amendment026User(), amendment026MissingDirectIdentity]));", "  const amendment026MissingDirectIdentity = amendment026Assistant('msg_assistant_missing_identity'); delete amendment026MissingDirectIdentity.info.modelID; amendment026Reject(amendment026Export([amendment026User(), amendment026MissingDirectIdentity]), 'opencode_export_malformed_assistant_lineage');"],
+    ["  amendment026Reject(amendment026Export([amendment026User()]));", "  amendment026Reject(amendment026Export([amendment026User()]), 'opencode_export_missing_canonical_assistant');"],
+    ["  amendment026Reject(amendment026Export([amendment026User('msg_user', { modelID: 'wrong-model' }), amendment026Assistant()]));", "  amendment026Reject(amendment026Export([amendment026User('msg_user', { modelID: 'wrong-model' }), amendment026Assistant()]), 'opencode_export_canonical_user_identity_mismatch');"],
+    ["  amendment026Reject(amendment026Export([amendment026User(), amendment026User('msg_user_2'), amendment026Assistant()]));", "  amendment026Reject(amendment026Export([amendment026User(), amendment026User('msg_user_2'), amendment026Assistant()]), 'opencode_export_canonical_user_count_mismatch');"],
+    ["  amendment026Reject(amendment026Export([amendment026User('msg_user', { compaction: true }), amendment026Assistant()]));", "  amendment026Reject(amendment026Export([amendment026User('msg_user', { compaction: true }), amendment026Assistant()]), 'opencode_export_canonical_user_count_mismatch');"],
+    ["  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_orphan', 'msg_missing_parent')]));", "  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_orphan', 'msg_missing_parent')]), 'opencode_export_orphan_assistant_lineage');"],
+    ["  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_parent_assistant'), amendment026Assistant('msg_child_assistant', 'msg_parent_assistant')]));", "  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_parent_assistant'), amendment026Assistant('msg_child_assistant', 'msg_parent_assistant')]), 'opencode_export_assistant_parent_not_user');"],
+    ["  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_wrong_session', 'msg_user', { sessionID: 'ses_wrong' })]));", "  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant('msg_wrong_session', 'msg_user', { sessionID: 'ses_wrong' })]), 'opencode_export_malformed_message_identity');"],
+    ["  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant()]), 'ses_wrong_export');", "  amendment026Reject(amendment026Export([amendment026User(), amendment026Assistant()]), 'opencode_export_session_identity_mismatch', 'ses_wrong_export');"],
+    ["  amendment026Reject({ info: { id: amendment026SessionID }, messages: 'not-an-array' });", "  amendment026Reject({ info: { id: amendment026SessionID }, messages: 'not-an-array' }, 'opencode_export_session_identity_mismatch');"],
+    ["  amendment026Reject(amendment026Export([null]));", "  amendment026Reject(amendment026Export([null]), 'opencode_export_malformed_messages');"],
+    ["  const amendment026DuplicateID = amendment026Assistant('msg_user'); amendment026Reject(amendment026Export([amendment026User(), amendment026DuplicateID]));", "  const amendment026DuplicateID = amendment026Assistant('msg_user'); amendment026Reject(amendment026Export([amendment026User(), amendment026DuplicateID]), 'opencode_export_duplicate_message_identity');"],
+    ["  const amendment026WrongPartSession = amendment026User(); amendment026WrongPartSession.parts[0].sessionID = 'ses_wrong'; amendment026Reject(amendment026Export([amendment026WrongPartSession, amendment026Assistant()]));", "  const amendment026WrongPartSession = amendment026User(); amendment026WrongPartSession.parts[0].sessionID = 'ses_wrong'; amendment026Reject(amendment026Export([amendment026WrongPartSession, amendment026Assistant()]), 'opencode_export_malformed_message_parts');"],
+  ];
+  for (const [before, after] of fixtureMappings) source = replaceOnce(source, before, after, 'Amendment 029 Amendment 026 negative fixture fixed-code expectation');
+
+  const selfTestAnchor = "  if (amendment026InternalEvidence.providerID !== CANONICAL_PROVIDER || amendment026InternalEvidence.modelID !== CANONICAL_MODEL) throw new Error('Amendment 026 normalized evidence lost canonical identity constants');";
+  const amendment029SelfTests = lines([
+    selfTestAnchor,
+    "  const amendment029MalformedUserModel = amendment026User(); delete amendment029MalformedUserModel.info.model; amendment026Reject(amendment026Export([amendment029MalformedUserModel, amendment026Assistant()]), 'opencode_export_malformed_user_model_identity');",
+    "  let amendment029InvalidJsonReason = null; try { JSON.parse('{amendment-029-invalid-json'); } catch { amendment029InvalidJsonReason = failureCode(codedFailure('opencode_export_invalid_json')); }",
+    "  if (amendment029InvalidJsonReason !== 'opencode_export_invalid_json') throw new Error('Amendment 029 malformed JSON fixed-code self-test failed');",
+    `  const amendment029FailureCodes = ${JSON.stringify(amendment029FailureCodes)};`,
+    "  for (const code of amendment029FailureCodes) if (!FAILURE_REASON_CODES.has(code)) throw new Error('Amendment 029 fixed-code vocabulary self-test failed');",
+    "  const amendment029LeakSentinels = ['Authorization: Bearer amendment-029-secret','credential=amendment-029-secret','/tmp/amendment-029-path','transcript-amendment-029','session-amendment-029','message-amendment-029','model-prose-amendment-029','{\\\"path\\\":\\\"tool-argument-amendment-029\\\"}'];",
+    "  for (let index = 0; index < amendment029LeakSentinels.length; index += 1) { const hostile = codedFailure(amendment029FailureCodes[index % amendment029FailureCodes.length]); hostile.message = amendment029LeakSentinels[index]; const probe = { outcome: 'FAIL', failed_at: 'opencode_sanitized_export_identity_exact', failure_reason: failureCode(hostile) }; validateFailureRecord(probe); if (JSON.stringify(probe).includes(amendment029LeakSentinels[index])) throw new Error('Amendment 029 machine record leaked untrusted diagnostic content'); }",
+    "  if (failureCode(new Error('amendment-029-unknown-exception-secret')) !== 'unclassified_internal_failure') throw new Error('Amendment 029 unknown exception did not preserve bounded fallback');",
+  ]).trimEnd();
+  source = replaceOnce(source, selfTestAnchor, amendment029SelfTests, 'Amendment 029 deterministic fixed-code and no-leak self-tests');
+
+  const vocabularyStart = source.indexOf('const FAILURE_REASON_CODES = new Set([');
+  const vocabularyEnd = source.indexOf(']);', vocabularyStart);
+  if (vocabularyStart < 0 || vocabularyEnd <= vocabularyStart) throw new Error('R181 Amendment 029 fixed-code vocabulary boundary drifted');
+  const vocabularySource = source.slice(vocabularyStart, vocabularyEnd);
+  for (const code of amendment029FailureCodes) if ((vocabularySource.split(`'${code}',`).length - 1) !== 1) throw new Error('R181 Amendment 029 fixed code was not declared exactly once in bounded vocabulary');
+  if (source.includes(jsonParseBefore) || (source.split(jsonParseAfter).length - 1) !== 1) throw new Error('R181 Amendment 029 malformed JSON diagnostic boundary drifted');
+  for (const [before, after, code] of rejectionMappings) {
+    if (source.includes(before) || (source.split(after).length - 1) !== 1 || !amendment029FailureCodes.includes(code)) throw new Error('R181 Amendment 029 lineage diagnostic boundary drifted');
+  }
+
+  let restored = source;
+  restored = replaceOnce(restored, amendment029SelfTests, selfTestAnchor, 'Amendment 029 restore deterministic diagnostic self-tests');
+  for (const [before, after] of [...fixtureMappings].reverse()) restored = replaceOnce(restored, after, before, 'Amendment 029 restore Amendment 026 negative fixture');
+  restored = replaceOnce(restored, rejectHelperAfter, rejectHelperBefore, 'Amendment 029 restore Amendment 026 negative helper');
+  for (const [before, after] of [...rejectionMappings].reverse()) restored = replaceOnce(restored, after, before, 'Amendment 029 restore lineage rejection');
+  restored = replaceOnce(restored, jsonParseAfter, jsonParseBefore, 'Amendment 029 restore malformed JSON boundary');
+  restored = replaceOnce(restored, amendment029VocabularyTail, previousVocabularyTail, 'Amendment 029 restore failure vocabulary');
+  if (restored !== originalSource) throw new Error('R181 Amendment 029 changed generated candidate beyond authorized fixed-code diagnostics and deterministic self-tests');
+  return source;
+}
+
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
@@ -1830,13 +1949,15 @@ try {
   const amendment026Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment028(candidateSource);
   const amendment028Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment029(candidateSource);
+  const amendment029Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_028_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_022_blob: amendment022Blob, amendment_023_blob: amendment023Blob, amendment_024_blob: amendment024Blob, amendment_025_blob: amendment025Blob, amendment_026_blob: amendment026Blob, amendment_028_blob: amendment028Blob, amendment_023_prompt_sha256: 'a80d61c9d848746309e541e01af89318925918bdd09a341d2fea5fd097c3ac4e', amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, amendment_024_provider_strategy_id: 'delethos-local-llama-qwen25-instruct', amendment_024_model_repository: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', amendment_024_model_revision: 'a615a81362316d7b9f5a7a9c4313adfdf9b54588', amendment_024_model_file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', amendment_024_model_sha256: '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e', amendment_024_model_id: 'delethos-qwen25-instruct-1.5b-q4km', amendment_025_pi_toolresult_text: 'Successfully wrote 17 bytes to delethos-r181-smoke.txt', amendment_028_opencode_autocompact: 'OPENCODE_DISABLE_AUTOCOMPACT=1', runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability+runtime-source-normalization+layer-a-timeout-budget+layer-a-tool-call-first-prompt+model-baseline-replacement+exact-toolresult-continuation', opencode_evidence: 'temporary-qualification-config-model-identity-only+sanitized-export-canonical-lineage-bound-identity' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_029_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_022_blob: amendment022Blob, amendment_023_blob: amendment023Blob, amendment_024_blob: amendment024Blob, amendment_025_blob: amendment025Blob, amendment_026_blob: amendment026Blob, amendment_028_blob: amendment028Blob, amendment_029_blob: amendment029Blob, amendment_029_failure_code_count: 16, amendment_023_prompt_sha256: 'a80d61c9d848746309e541e01af89318925918bdd09a341d2fea5fd097c3ac4e', amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, amendment_024_provider_strategy_id: 'delethos-local-llama-qwen25-instruct', amendment_024_model_repository: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', amendment_024_model_revision: 'a615a81362316d7b9f5a7a9c4313adfdf9b54588', amendment_024_model_file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', amendment_024_model_sha256: '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e', amendment_024_model_id: 'delethos-qwen25-instruct-1.5b-q4km', amendment_025_pi_toolresult_text: 'Successfully wrote 17 bytes to delethos-r181-smoke.txt', amendment_028_opencode_autocompact: 'OPENCODE_DISABLE_AUTOCOMPACT=1', runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability+runtime-source-normalization+layer-a-timeout-budget+layer-a-tool-call-first-prompt+model-baseline-replacement+exact-toolresult-continuation', opencode_evidence: 'temporary-qualification-config-model-identity-only+sanitized-export-canonical-lineage-bound-identity' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
