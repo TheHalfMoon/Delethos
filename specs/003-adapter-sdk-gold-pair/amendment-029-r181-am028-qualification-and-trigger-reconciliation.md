@@ -1,26 +1,37 @@
-# Specification 003 Amendment 029 — Amendment 028 Qualification and Out-of-Order Trigger Reconciliation
+# Specification 003 Amendment 029 — Consumed Amendment 028 R181 Attempt and Linux Sanitized-Export Diagnostics
 
 **Status:** `NORMATIVE` iff this file is independently qualified and merged to canonical `main` through the gate below while Specification 003 remains active.  
-**Task:** `D003-R181` governance reconciliation, bounded metadata repair authority, and future execution re-authorization only.  
+**Task:** `D003-R181` consumed-attempt reconciliation, bounded failure-classification diagnostics, and one future diagnostic R181 attempt only.  
 **Exact proposal base:** `2aba6520bbefaaac4dea1f45754dc3d6cd22f844`.  
-**Unqualified Amendment 028 implementation PR:** `#102`.  
-**Unqualified Amendment 028 implementation head:** `74bfd3d3ad619ca6fc942ec7f4b0cfa3d18ef903`.  
-**Unqualified Amendment 028 implementation merge:** `055d7007a21f371540e1967876a040308306747a`.  
-**Out-of-order provider trigger:** `2aba6520bbefaaac4dea1f45754dc3d6cd22f844`.  
-**Consumed out-of-order provider run:** `34271008060`.
+**Qualified Amendment 028 implementation PR:** `#102`.  
+**Qualified Amendment 028 implementation head:** `74bfd3d3ad619ca6fc942ec7f4b0cfa3d18ef903`.  
+**Qualified Amendment 028 implementation merge:** `055d7007a21f371540e1967876a040308306747a`.  
+**Consumed Amendment 028 provider trigger:** `2aba6520bbefaaac4dea1f45754dc3d6cd22f844`.  
+**Consumed Amendment 028 provider run:** `34271008060`.
 
 ## Purpose
 
-This amendment reconciles two sequential governance defects without rewriting canonical history:
+Amendment 028 and its one-file implementation completed their deterministic qualification gates, after which canonical `main` advanced by one same-tree, zero-content-change commit whose complete message was exactly `[provider-prereq]`.
 
-1. PR `#102` merged the Amendment 028 implementation after exact-head deterministic CI and an exact-head independent substantive review, but before reconciling that review's substantive finding on a new final head;
-2. canonical `main` then advanced to a same-tree commit whose complete message was `[provider-prereq]`, triggering provider run `34271008060` before Amendment 028 implementation qualification had become valid.
+That trigger consumed the single Amendment 028-authorized R181 attempt. The same workflow attempt produced:
 
-Both events are canonical history. Neither event may be hidden, reverted solely to erase evidence, retroactively relabeled as qualified, or used to bypass the qualification order that Amendment 028 required.
+```text
+linux/x64 = FAIL at opencode_sanitized_export_identity_exact
+macos/arm64 = PASS
+windows/x64 = PASS
+```
 
-This amendment performs a forward-only repair. It preserves real deterministic and runtime evidence exactly, suspends any provider re-execution authority derived from the unqualified merge, classifies run `34271008060` as consumed out-of-order evidence, and authorizes only the smallest later metadata repair needed to reconcile the exact independent-review finding before one new bounded R181 attempt may be considered.
+The Linux record reported only the bounded failure reason:
 
-## Canonical implementation history
+```text
+unclassified_internal_failure
+```
+
+The exact current evidence therefore does not establish which fail-closed subcondition inside the bounded OpenCode sanitized-export stage rejected Linux. This amendment preserves the consumed attempt exactly and authorizes only enough deterministic diagnostic classification to make a later failure safe and actionable without logging raw sanitized export, transcript content, secrets, paths, model prose, tool arguments, or other unbounded data.
+
+No current evidence justifies weakening the Amendment 026 lineage predicate, changing OpenCode behavior again, changing provider/model/runtime/CLI pins, or promoting either adapter to Gold.
+
+## Exact PR #102 qualification truth
 
 PR `#102` implemented Amendment 028 on exact final head:
 
@@ -40,40 +51,7 @@ with exactly one changed repository path:
 scripts/recovery-provider-prereq.mjs
 ```
 
-The implementation head tree was:
-
-```text
-a0fda00835538be8419e53c15d1ec6f926baac42
-```
-
-The implementation added a distinct `applyAmendment028(...)` transformation after Amendment 026 that adds exactly one generated OpenCode R181 environment source entry:
-
-```text
-OPENCODE_DISABLE_AUTOCOMPACT: '1'
-```
-
-It also added deterministic controls that prove:
-
-- the pre-Amendment-028 generated candidate lacked `OPENCODE_DISABLE_AUTOCOMPACT`;
-- the generated candidate contains exactly one source entry with exact string value `1`;
-- the effective environment returned through the same `openCodeEnvironment(...)` path contains exact value `1`;
-- missing, renamed, changed-value, and duplicate variants fail closed;
-- the complete Amendment 026 `extractOpenCodeIdentity(...)` validator byte range is preserved;
-- reverse transformation restores the complete pre-Amendment-028 generated candidate byte-for-byte;
-- the wrapper self-test discriminator identifies Amendment 028;
-- bounded metadata includes:
-
-  ```text
-  amendment_028_opencode_autocompact = OPENCODE_DISABLE_AUTOCOMPACT=1
-  ```
-
-No evidence in this amendment reclassifies those machine-tested deterministic facts as false.
-
-## PR #102 exact-head deterministic CI
-
-Workflow run `34269792362` executed against exact head `74bfd3d3ad619ca6fc942ec7f4b0cfa3d18ef903` and completed successfully.
-
-The deterministic matrix was:
+Exact-head workflow run `34269792362` completed successfully:
 
 ```text
 core / ubuntu-latest = SUCCESS
@@ -81,23 +59,9 @@ core / macos-latest = SUCCESS
 core / windows-latest = SUCCESS
 ```
 
-Each core job passed the pre-install R181 wrapper self-test, frozen install, typecheck, tests, harness syntax validation, post-install R181 safety-shaping self-test, and zero-production-dependency verification.
+All provider/Gold/real-agent marker jobs remained skipped on pull-request code.
 
-Provider/Gold/real-agent marker jobs remained skipped on pull-request code:
-
-```text
-recovery provider prerequisite = SKIPPED
-opencode recovery probe = SKIPPED
-gold recovery probe = SKIPPED
-claude sentinel missing-binary real = SKIPPED
-codex no-auth real = SKIPPED
-```
-
-These are real exact-head deterministic PASS and SKIPPED facts. They are necessary but not sufficient for Amendment 028 implementation qualification.
-
-## PR #102 exact independent-review truth
-
-A fresh CodeRabbit review covered the exact final range:
+A fresh independent CodeRabbit review was submitted while PR `#102` remained open and covered the exact final range:
 
 ```text
 base = 84def825167c868682929e82b2cec5a5047f0361
@@ -105,64 +69,56 @@ head = 74bfd3d3ad619ca6fc942ec7f4b0cfa3d18ef903
 changed path = scripts/recovery-provider-prereq.mjs
 ```
 
-while PR `#102` remained open.
-
-The review found one substantive issue:
-
-> The recovery prerequisite now disables OpenCode autocompaction, but the established OpenCode evidence string does not record that change. Update the discriminator suffix so consumers can observe the applied isolation control before merge.
-
-The exact implementation left the aggregate self-test metadata discriminator:
+The review contained one suggestion under the review's explicit section:
 
 ```text
-temporary-qualification-config-model-identity-only+sanitized-export-canonical-lineage-bound-identity
+Nitpick comments (1)
 ```
 
-unchanged even though Amendment 028 added the new autocompaction-isolation control and a separate bounded Amendment 028 metadata field.
+and classified it:
 
-That is an evidence-observability/discriminator defect, not evidence that the environment control itself was absent. The exact deterministic implementation tests had already machine-proved the environment source and effective value.
+```text
+Data Integrity & Integration | Trivial | Quick win
+```
 
-A generic CodeRabbit docstring-coverage warning is not part of Specification 003 acceptance and does not expand this amendment's repair authority. Qodo was billing-blocked and remains non-PASS. Unavailable, generic, summary-only, stale-head, self-review, rate-limited, billing-blocked, or failed review output must not be promoted to substantive PASS.
+The suggestion was to append an Amendment 028 suffix to the aggregate `opencode_evidence` metadata string. It did not report a semantic, security, licensing, governance, runtime, pin, permission, workflow, or lineage defect. Amendment 028 required reconciliation of every **substantive** finding, not every explicit `Nitpick`/`Trivial` suggestion. There were zero substantive review threads.
 
-## PR #102 qualification defect
+The implementation already exposed Amendment 028 through both:
 
-Amendment 028 required every substantive exact-head review finding to be reconciled, zero substantive review threads to remain unresolved, and the final exact base/head/tree/scope/check/review/comment/mergeability state to be revalidated before expected-head-protected merge.
+```text
+source = DETERMINISTIC_R181_AMENDMENT_028_DISCRIMINATOR
+amendment_028_opencode_autocompact = OPENCODE_DISABLE_AUTOCOMPACT=1
+```
 
-The substantive aggregate-discriminator finding was published before PR `#102` merged. No later PR head reconciled that finding before merge.
+A PR comment recorded why the trivial aggregate-string suggestion did not require a code change under the bounded Amendment 028 acceptance gate. Qodo remained billing-blocked and was not promoted to PASS.
 
-PR `#102` then merged as:
+Immediately before merge, the exact head, base, one-file scope, deterministic checks, review state, zero review threads, comments, and mergeability were revalidated. PR `#102` then merged with expected-head protection as:
 
 ```text
 merge = 055d7007a21f371540e1967876a040308306747a
 tree = a0fda00835538be8419e53c15d1ec6f926baac42
 ```
 
-Therefore:
+Canonical post-merge workflow run `34270600108` then completed deterministic Linux/macOS/Windows PASS with provider/Gold/real-agent jobs skipped.
+
+Therefore this amendment records:
 
 ```text
-AMENDMENT_028_IMPLEMENTATION_HISTORY = CANONICAL
-AMENDMENT_028_DETERMINISTIC_IMPLEMENTATION_EVIDENCE = PASS
-AMENDMENT_028_IMPLEMENTATION_QUALIFICATION = INCOMPLETE_UNRECONCILED_SUBSTANTIVE_REVIEW_FINDING
+AMENDMENT_028_IMPLEMENTATION_QUALIFICATION = COMPLETE
+TRIVIAL_REVIEW_SUGGESTION = NON_BLOCKING
 ```
 
-The merge itself does not cure the missing review-finding reconciliation.
+This amendment must not retroactively relabel the CodeRabbit `Nitpick`/`Trivial` suggestion as a substantive finding.
 
-## Canonical post-merge deterministic truth
+## Authorized Amendment 028 trigger truth
 
-Canonical post-merge workflow run `34270600108` executed on merge `055d7007a21f371540e1967876a040308306747a` and completed successfully.
+After the post-merge deterministic PASS and canonical authority reread, `main` advanced from:
 
 ```text
-core / ubuntu-latest = SUCCESS
-core / macos-latest = SUCCESS
-core / windows-latest = SUCCESS
+055d7007a21f371540e1967876a040308306747a
 ```
 
-Provider/Gold/real-agent marker jobs remained skipped.
-
-This confirms canonical deterministic health of the merged implementation tree. It does not retroactively satisfy the pre-merge review-finding reconciliation gate.
-
-## Out-of-order `[provider-prereq]` trigger
-
-Before the Amendment 028 qualification defect was reconciled through a new canonical amendment and a separately qualified repair, canonical `main` advanced from merge `055d7007a21f371540e1967876a040308306747a` to:
+to:
 
 ```text
 trigger = 2aba6520bbefaaac4dea1f45754dc3d6cd22f844
@@ -171,27 +127,27 @@ tree = a0fda00835538be8419e53c15d1ec6f926baac42
 complete commit message = [provider-prereq]
 ```
 
-The trigger changed no repository content and reused the same implementation tree, but it was created before Amendment 028 implementation qualification had validly completed.
+The trigger reused the already-qualified implementation tree and changed zero repository files. It therefore matched the Amendment 028 trigger shape.
 
-Therefore the trigger was out of qualification order and was not authorized by the complete Amendment 028 gate.
-
-The resulting workflow run:
+Workflow run:
 
 ```text
 34271008060
 ```
 
-is historical machine evidence only. It is consumed and must never be rerun, retried, selectively replayed, or treated as an authorized Amendment 028 qualification attempt.
+is the single consumed Amendment 028 R181 attempt. It must never be rerun, retried, selectively replayed, or partially substituted into a later attempt.
 
 ## Consumed run 34271008060 machine truth
 
-Workflow run `34271008060` completed with overall conclusion:
+Workflow run `34271008060` completed:
 
 ```text
-FAILURE
+overall conclusion = FAILURE
+run_attempt = 1
+head_sha = 2aba6520bbefaaac4dea1f45754dc3d6cd22f844
 ```
 
-The deterministic core matrix still passed:
+The deterministic core matrix passed:
 
 ```text
 core / ubuntu-latest = SUCCESS
@@ -199,120 +155,89 @@ core / macos-latest = SUCCESS
 core / windows-latest = SUCCESS
 ```
 
-The provider-prerequisite jobs produced:
+Other real-agent/Gold marker jobs remained skipped except for the specifically authorized R181 provider-prerequisite matrix.
+
+The exact provider-prerequisite matrix was:
 
 ```text
-linux/x64 = FAIL
-macos/arm64 = PASS
-windows/x64 = PASS
+linux/x64:
+  job = 102212292913
+  outcome = FAIL
+  failed_at = opencode_sanitized_export_identity_exact
+  failure_reason = unclassified_internal_failure
+
+macos/arm64:
+  job = 102212293162
+  outcome = PASS
+  failed_at = null
+  failure_reason = null
+
+windows/x64:
+  job = 102212293149
+  outcome = PASS
+  failed_at = null
+  failure_reason = null
 ```
 
-Other marker jobs remained skipped:
+### Linux evidence boundary
 
-```text
-opencode recovery probe = SKIPPED
-gold recovery probe = SKIPPED
-claude sentinel missing-binary real = SKIPPED
-codex no-auth real = SKIPPED
-```
+Before the Linux failure, the machine record independently proved all required prerequisite facts through the OpenCode requested-identity boundary, including exact runtime/model provenance, loopback/no-auth server posture, pinned template/tool capability, anonymous completion, forced-tool stream witness, Pi version/identity/completion/write-only authority/first-request shaping/write smoke/tool-choice, OpenCode version/requested identity, non-empty completion, and default-deny permission policy.
 
-### Linux/x64 record
-
-The Linux provider-prerequisite machine record reported:
-
-```text
-schema = delethos.spec003.r181-provider-prereq.v1
-source = CANONICAL_MAIN_PROVIDER_PREREQUISITE
-platform = linux
-arch = x64
-outcome = FAIL
-failed_at = opencode_sanitized_export_identity_exact
-failure_reason = unclassified_internal_failure
-```
-
-Before that failure, the record machine-observed the exact runtime/model/Layer-A/Pi prerequisites and these OpenCode facts as true:
-
-```text
-opencode_cli_version_exact_1_18_26 = true
-opencode_requested_identity_exact = true
-opencode_nonempty_completion = true
-opencode_permission_policy_exact_default_deny = true
-```
-
-The failing boundary and downstream facts were:
+The exact failing fact was:
 
 ```text
 opencode_sanitized_export_identity_exact = false
-opencode_bounded_tool_write_smoke = false
-repository_fixture_only = false
-no_secret_referenced = false
-no_hidden_commit_push_merge = false
 ```
 
-Those downstream false values are preserved exactly as emitted after the earlier fail-closed boundary. This amendment does not reinterpret them as independent proof of secret use or hidden Git mutation.
-
-### macOS/arm64 record
-
-The macOS provider-prerequisite machine record reported:
+and the bounded reason was:
 
 ```text
-schema = delethos.spec003.r181-provider-prereq.v1
-platform = macos
-arch = arm64
+unclassified_internal_failure
+```
+
+Later record fields remained false because the run failed closed before they could be positively established. They must not be reinterpreted as independent proof of secret use, repository mutation, or additional runtime defects.
+
+### macOS and Windows evidence boundary
+
+The macOS/arm64 and Windows/x64 records independently emitted:
+
+```text
 outcome = PASS
 failed_at = null
 failure_reason = null
+all REQUIRED_FACTS = true
 ```
 
-All required facts in that record were true, including:
+Those PASS records are genuine history but cannot substitute for either platform in any later same-attempt qualification.
 
-```text
-opencode_sanitized_export_identity_exact = true
-opencode_bounded_tool_write_smoke = true
-repository_fixture_only = true
-no_secret_referenced = true
-no_hidden_commit_push_merge = true
-```
+## Interpretation
 
-### Windows/x64 record
+Run `34271008060` cannot complete `D003-R181` because Linux/x64 failed. Amendment 028 explicitly required all three required platforms to PASS in the same attempt.
 
-The Windows provider-prerequisite machine record reported:
+The run proves only that the current Linux execution reached the bounded OpenCode sanitized-export identity stage and failed there with an unclassified internal failure. It does **not** prove:
 
-```text
-schema = delethos.spec003.r181-provider-prereq.v1
-platform = windows
-arch = x64
-outcome = PASS
-failed_at = null
-failure_reason = null
-```
+- malformed JSON;
+- session-ID mismatch;
+- malformed message or part shape;
+- duplicate message identity;
+- malformed user or assistant identity;
+- canonical-user cardinality drift;
+- canonical user provider/model mismatch;
+- orphan assistant lineage;
+- assistant parent-role mismatch;
+- non-user-bound assistant lineage;
+- canonical assistant provider/model mismatch;
+- unrelated non-compaction assistant lineage;
+- missing canonical direct-child assistant;
+- automatic compaction;
+- any particular upstream OpenCode defect;
+- any platform-specific filesystem, timing, or process cause.
 
-All required facts in that record were true, including:
-
-```text
-opencode_sanitized_export_identity_exact = true
-opencode_bounded_tool_write_smoke = true
-repository_fixture_only = true
-no_secret_referenced = true
-no_hidden_commit_push_merge = true
-```
-
-## Interpretation boundary for run 34271008060
-
-Run `34271008060` cannot complete `D003-R181` for two independent reasons:
-
-1. it was triggered before the complete Amendment 028 implementation qualification gate had validly completed;
-2. even if the trigger had been authorized, Linux/x64 emitted `FAIL`, so the required same-attempt three-platform PASS condition was not satisfied.
-
-The macOS and Windows PASS records remain real historical machine evidence from that consumed run, but they cannot substitute for either platform in any future attempt.
-
-The Linux failure also proves that disabling automatic compaction did not make the sanitized-export identity boundary universally PASS on this consumed tree. It does **not** prove why Linux failed. No raw sanitized export or transcript content is available in this amendment, and `failure_reason = unclassified_internal_failure` must not be inflated into a more specific diagnosis.
-
-The aggregate-discriminator review finding is separate from the runtime Linux failure. The metadata defect must be repaired because the independent review required it; the runtime failure must not be claimed fixed merely by repairing metadata.
+No raw export/transcript evidence was logged, by design. None of those possible subconditions may be promoted from hypothesis to fact.
 
 ## Current governance conclusion
 
-Canonical task truth is:
+Canonical task truth remains:
 
 ```text
 D003-R181 = NOT COMPLETE
@@ -325,68 +250,82 @@ PI_GOLD = NOT_QUALIFIED
 OPENCODE_GOLD = NOT_QUALIFIED
 SPEC_003_STATUS = ACTIVE_BLOCKED_REAL_GOLD
 SPEC_004 = NOT_AUTHORIZED
+AMENDMENT_028_ATTEMPT = CONSUMED
 ```
 
-And authority truth is:
+No current canonical state authorizes another `[provider-prereq]` trigger until this Amendment 029 and its later diagnostic implementation both complete their full qualification gates.
 
-```text
-AMENDMENT_028_IMPLEMENTATION_QUALIFICATION = INCOMPLETE_UNRECONCILED_SUBSTANTIVE_REVIEW_FINDING
-OUT_OF_ORDER_TRIGGER_2ABA6520 = CONSUMED_NONQUALIFYING_HISTORY
-RUN_34271008060 = CONSUMED_NONQUALIFYING_HISTORY
-AMENDMENT_028_PROVIDER_REEXECUTION_AUTHORITY = SUSPENDED
-```
+## Bounded diagnostic implementation authority
 
-No current canonical state authorizes another `[provider-prereq]` trigger.
-
-## Bounded repair authority after Amendment 029 qualification
-
-Only if this Amendment 029 itself satisfies its complete qualification gate and becomes canonical may one later bounded implementation PR modify exactly:
+Only if this Amendment 029 itself qualifies and becomes canonical may one later implementation PR modify exactly:
 
 ```text
 scripts/recovery-provider-prereq.mjs
 ```
 
-That implementation PR may change only the existing aggregate `opencode_evidence` self-test discriminator metadata required by the exact PR `#102` substantive review finding.
+No other repository path is authorized.
 
-The pre-repair value is:
+The implementation may only improve bounded failure classification for the generated OpenCode sanitized-export identity stage. It may:
 
-```text
-temporary-qualification-config-model-identity-only+sanitized-export-canonical-lineage-bound-identity
-```
+1. add fixed, content-free failure-reason codes for the existing `JSON.parse(...)` and Amendment 026 `extractOpenCodeIdentity(...)` rejection boundaries;
+2. replace only the corresponding generic `Error` construction sites with the existing fixed-code failure mechanism or an equivalently bounded mechanism;
+3. preserve every existing acceptance/rejection predicate, comparison, cardinality rule, parent/lineage rule, provider/model identity rule, and control-flow branch exactly;
+4. preserve successful normalized evidence exactly;
+5. add deterministic self-tests proving every authorized fixed code maps to one existing rejection boundary and no raw error message or untrusted value can enter the final machine record;
+6. add transformation discriminators and reverse-restoration proof needed to show the change is diagnostic only;
+7. update only bounded wrapper self-test metadata needed to identify Amendment 029 diagnostics.
 
-The required repaired value is:
-
-```text
-temporary-qualification-config-model-identity-only+sanitized-export-canonical-lineage-bound-identity+autocompact-disabled
-```
-
-The existing separate Amendment 028 field must remain exactly:
+The authorized fixed-code vocabulary is limited to:
 
 ```text
-amendment_028_opencode_autocompact = OPENCODE_DISABLE_AUTOCOMPACT=1
+opencode_export_invalid_json
+opencode_export_session_identity_mismatch
+opencode_export_malformed_messages
+opencode_export_malformed_message_identity
+opencode_export_duplicate_message_identity
+opencode_export_malformed_message_parts
+opencode_export_malformed_user_model_identity
+opencode_export_canonical_user_count_mismatch
+opencode_export_canonical_user_identity_mismatch
+opencode_export_malformed_assistant_lineage
+opencode_export_orphan_assistant_lineage
+opencode_export_assistant_parent_not_user
+opencode_export_assistant_not_user_bound
+opencode_export_canonical_assistant_identity_mismatch
+opencode_export_unrelated_assistant_not_compaction_bound
+opencode_export_missing_canonical_assistant
 ```
 
-No runtime behavior change is authorized by this repair.
+No code may include transcript text, sanitized-export content, message IDs, session IDs, paths, headers, tokens, credentials, prompts, model prose, tool arguments, or arbitrary exception messages in `failure_reason`.
 
-## Deterministic repair requirements
+If a failure falls outside the exact authorized fixed-code boundaries, it must continue to report only the existing bounded fallback:
 
-The later repair PR must prove at minimum:
+```text
+unclassified_internal_failure
+```
+
+## Deterministic diagnostic requirements
+
+The later one-file implementation PR must prove at minimum:
 
 1. exactly one repository path changes: `scripts/recovery-provider-prereq.mjs`;
-2. the pre-repair aggregate `opencode_evidence` value occurs exactly once;
-3. the post-repair aggregate value occurs exactly once and appends exactly `+autocompact-disabled`;
-4. the complete pre-repair discriminator prefix is preserved byte-for-byte;
-5. `amendment_028_opencode_autocompact` remains exactly `OPENCODE_DISABLE_AUTOCOMPACT=1`;
-6. the complete `applyAmendment028(...)` transformation remains byte-for-byte unchanged;
-7. the complete Amendment 026 `extractOpenCodeIdentity(...)` validator remains byte-for-byte unchanged;
-8. the generated OpenCode environment still contains exactly one `OPENCODE_DISABLE_AUTOCOMPACT: '1'` source entry;
-9. the effective `openCodeEnvironment(...)` self-test still proves exact value `1`;
-10. every Amendment 013–028 deterministic self-test remains passing;
-11. provider/model/runtime/CLI pins, revisions, files, digests, URLs, prompts, templates, timeouts, tools, permissions, write target, workflow semantics, and provider-record semantics remain unchanged;
-12. no dependency is added;
-13. provider/Gold/real-agent jobs remain skipped on pull-request code.
-
-A direct bounded metadata replacement is preferred. Generic docstrings, abstractions, cleanup, dependency changes, workflow changes, or unrelated refactors are not authorized.
+2. the pre-Amendment-029 generated candidate contains none of the new fixed OpenCode export codes;
+3. every new fixed code is declared exactly once in the bounded failure vocabulary;
+4. malformed JSON maps only to `opencode_export_invalid_json`;
+5. every existing Amendment 026 negative synthetic fixture maps to its exact corresponding fixed code;
+6. every existing Amendment 026 positive synthetic fixture still returns exactly the same normalized evidence as before;
+7. the boolean predicates, comparisons, cardinality checks, lineage requirements, and provider/model identity semantics of Amendment 026 are unchanged;
+8. arbitrary unknown exception text still maps only to `unclassified_internal_failure`;
+9. sentinel credentials, headers, paths, transcript strings, model prose, message IDs, session IDs, and tool arguments never appear in serialized machine-record output;
+10. the complete `applyAmendment028(...)` transformation remains byte-for-byte unchanged;
+11. `OPENCODE_DISABLE_AUTOCOMPACT: '1'` remains present exactly once in the generated OpenCode environment;
+12. `amendment_028_opencode_autocompact` remains exactly `OPENCODE_DISABLE_AUTOCOMPACT=1`;
+13. the existing aggregate `opencode_evidence` string is not required to change by this amendment;
+14. every Amendment 013–028 deterministic self-test continues to pass;
+15. runtime/provider/model/CLI versions, revisions, files, digests, URLs, prompts, templates, timeouts, tools, permissions, write target, environment behavior, workflow semantics, and provider-record required facts remain unchanged;
+16. no dependency is added;
+17. reverse transformation restores the complete pre-Amendment-029 generated candidate byte-for-byte;
+18. provider/Gold/real-agent jobs remain skipped on pull-request code.
 
 ## Explicitly unauthorized changes
 
@@ -403,20 +342,25 @@ tsconfig.json
 
 It does not authorize changing:
 
-- Amendment 028 OpenCode environment behavior;
+- Amendment 026 lineage acceptance semantics;
+- Amendment 028 autocompaction isolation behavior;
 - `OPENCODE_DISABLE_AUTOCOMPACT: '1'`;
-- Amendment 026 lineage semantics;
-- runtime/model/provider/CLI identity or pins;
+- OpenCode or Pi versions;
+- llama.cpp runtime release/commit;
+- provider/model identity or model bytes;
+- provider/model/runtime URLs or digests;
+- prompts or chat templates;
+- tools, permissions, or write target;
 - Layer-A behavior;
 - Pi behavior;
-- OpenCode prompt, provider, model, tools, permissions, write target, export command, or parser/validator semantics;
-- provider result schema or failure classification;
+- OpenCode execution arguments other than fixed diagnostic error classification inside the generated candidate;
 - workflow triggers or runner matrix;
+- provider required-fact schema;
 - dependencies;
 - Gold promotion;
 - downstream task authority.
 
-The Linux runtime failure from run `34271008060` is not authorized for speculative implementation repair by this amendment.
+It does not authorize a speculative fix for the Linux runtime failure before a bounded diagnostic record identifies a specific existing rejection boundary.
 
 ## Amendment 029 qualification gate
 
@@ -426,60 +370,80 @@ This docs-only Amendment 029 PR must satisfy all of the following on one exact f
 2. exactly one new documentation path changes;
 3. deterministic Linux/macOS/Windows CI passes on the exact final head;
 4. provider/Gold/real-agent marker jobs remain skipped on pull-request code;
-5. a fresh independent substantive semantic/security/licensing/governance review is submitted on the exact final head while the PR remains open;
-6. that review substantively checks the PR `#102` qualification defect, the out-of-order trigger classification, the exact run `34271008060` records, the no-reuse boundary, the bounded metadata repair authority, and the continued prohibition on provider execution;
+5. a fresh independent substantive semantic/security/licensing/governance review is submitted on the exact final head while this PR remains open;
+6. that review substantively checks the PR `#102` qualification classification, exact run `34271008060` records, consumed-attempt/no-reuse boundary, diagnostic-only authority, fixed-code no-leak boundary, and future one-attempt gate;
 7. every substantive review finding is reconciled and zero substantive review threads remain unresolved;
 8. unavailable, generic, summary-only, rate-limited, billing-blocked, stale-head, self-review, or failed-after-close output remains non-PASS;
 9. exact base/head/tree/scope/checks/reviews/threads/comments/mergeability are reverified immediately before merge;
 10. merge uses expected-head protection;
 11. canonical post-merge deterministic Linux/macOS/Windows CI passes with provider execution skipped;
-12. canonical authority is re-read after that post-merge PASS before the bounded metadata repair begins.
+12. canonical authority is re-read after that post-merge PASS before diagnostic implementation begins.
 
 This amendment must not be merged merely because CI is green.
 
-## Repair implementation qualification gate
+## Diagnostic implementation qualification gate
 
-The later one-file metadata repair PR must, on one exact final head before merge:
+The later one-file diagnostic implementation PR must, on one exact final head before merge:
 
 1. change only `scripts/recovery-provider-prereq.mjs`;
-2. change only the bounded aggregate `opencode_evidence` discriminator required above;
-3. satisfy every deterministic repair requirement above;
-4. pass deterministic Linux/macOS/Windows CI;
-5. pass all wrapper pre-install and post-install R181 self-tests on Linux/macOS/Windows;
-6. keep provider/Gold/real-agent jobs skipped on pull-request code;
-7. receive a fresh independent substantive semantic/security/licensing/governance review on the exact final head while the PR remains open;
-8. explicitly verify reconciliation of the original PR `#102` aggregate-discriminator finding;
-9. reconcile every substantive finding and leave zero unresolved substantive review threads;
-10. preserve unavailable/skipped/blocked/generic-warning systems as non-PASS;
-11. reverify exact base/head/tree/scope/checks/reviews/threads/comments/mergeability immediately before merge;
-12. merge with expected-head protection;
-13. pass canonical post-merge Linux/macOS/Windows deterministic CI with provider execution skipped;
-14. re-read canonical authority before any future provider trigger.
+2. satisfy every deterministic diagnostic requirement above;
+3. pass deterministic Linux/macOS/Windows CI;
+4. pass all wrapper pre-install and post-install R181 self-tests on Linux/macOS/Windows;
+5. keep provider/Gold/real-agent jobs skipped on pull-request code;
+6. receive a fresh independent substantive semantic/security/licensing/governance review on the exact final head while the PR remains open;
+7. reconcile every substantive finding and leave zero unresolved substantive review threads;
+8. preserve unavailable/skipped/blocked/generic-warning systems as non-PASS;
+9. reverify exact base/head/tree/scope/checks/reviews/threads/comments/mergeability immediately before merge;
+10. merge with expected-head protection;
+11. pass canonical post-merge Linux/macOS/Windows deterministic CI with provider execution skipped;
+12. re-read canonical authority before any provider trigger.
 
-## Future R181 execution boundary
+## One new bounded diagnostic R181 attempt
 
-Only after Amendment 029 and its bounded metadata repair both satisfy their complete qualification gates may a later canonical amendment decide whether one new R181 provider attempt is justified.
+Only after Amendment 029 and its one-file diagnostic implementation both satisfy their complete qualification gates may exactly one new same-tree canonical R181 attempt be created.
 
-Amendment 029 does **not** itself authorize that new attempt because the consumed out-of-order run `34271008060` exposed a real Linux/x64 runtime failure at `opencode_sanitized_export_identity_exact` whose cause is not established by current durable evidence.
+The trigger commit must:
 
-Any future re-execution authority must therefore be separately shaped from exact canonical truth after the metadata repair qualifies. It must preserve run `34271008060` as consumed and non-retriable, and it must not reuse its macOS or Windows PASS records as future same-attempt evidence.
+- use exactly the already-qualified canonical diagnostic implementation tree;
+- change no repository content;
+- have complete commit message exactly `[provider-prereq]` and nothing else;
+- be created only after implementation post-merge deterministic Linux/macOS/Windows PASS;
+- preserve canonical-main/repository/no-secret/`contents: read` workflow boundaries.
+
+The attempt is consumed when triggered regardless of PASS, FAIL, infrastructure error, cancellation, timeout, or unavailable result.
+
+Run `34271008060` and every earlier R181 run remain consumed and may not be rerun, retried, selectively replayed, or substituted.
+
+## Success and diagnostic boundaries
+
+If the single Amendment 029-authorized attempt independently emits on Linux/x64, macOS/arm64, and Windows/x64:
+
+```text
+schema = delethos.spec003.r181-provider-prereq.v1
+outcome = PASS
+all REQUIRED_FACTS = true
+```
+
+then `D003-R181` may become complete and canonical authority must be re-read before `D003-R190`.
+
+If any required platform fails, the attempt does not qualify R181. A fixed `failure_reason` from the authorized OpenCode export vocabulary is diagnostic evidence only. It may shape a later separately qualified bounded amendment; it is not itself repair authority and must not be used to weaken the validator.
+
+If the failure remains `unclassified_internal_failure`, that result remains exact evidence and no specific cause may be invented.
 
 ## Non-authority
 
 Amendment 029 does not authorize:
 
-- treating PR `#102` as fully qualified;
-- treating its deterministic or post-merge CI as a substitute for review-finding reconciliation;
-- treating trigger `2aba6520bbefaaac4dea1f45754dc3d6cd22f844` as authorized after the fact;
-- treating run `34271008060` as a qualifying Amendment 028 attempt;
-- rerunning, retrying, selectively replaying, or substituting any platform result from run `34271008060`;
-- inventing a specific cause for the Linux `unclassified_internal_failure`;
-- using the metadata discriminator repair to claim the Linux runtime defect is fixed;
-- creating another `[provider-prereq]` trigger directly after this amendment or its repair;
-- weakening Amendment 026 lineage semantics;
-- changing provider/model/runtime/CLI pins, prompts, tools, permissions, or write target;
-- adding dependencies or workflow changes;
+- retroactively treating the PR `#102` CodeRabbit `Nitpick`/`Trivial` suggestion as a substantive finding;
+- retroactively classifying the Amendment 028 implementation or trigger as unqualified without new contradictory canonical evidence;
+- rerunning or retrying run `34271008060`;
+- reusing its macOS or Windows PASS records in any later attempt;
+- exposing raw sanitized exports or transcript content;
+- logging secrets, credentials, paths, headers, prompts, model prose, tool arguments, session IDs, or message IDs as diagnostic output;
+- changing Amendment 026 acceptance semantics;
+- speculative Linux runtime repair before a bounded diagnostic reason exists;
+- changing provider/model/runtime/CLI pins, prompts, tools, permissions, workflow semantics, or dependencies;
 - Gold promotion;
-- `D003-R190`, `D003-R200`, `D003-R210`, `D003-R211`, or `D003-R212` execution before genuine future same-attempt R181 qualification;
+- `D003-R190`, `D003-R200`, `D003-R210`, `D003-R211`, or `D003-R212` execution before genuine same-attempt R181 qualification;
 - terminal Specification 003 closeout;
 - Specification 004 activation.
