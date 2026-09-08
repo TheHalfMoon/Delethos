@@ -1785,8 +1785,10 @@ function applyAmendment028(source) {
 
 function applyAmendment029(source) {
   const originalSource = source;
-  const amendment028TransformationSha256 = createHash('sha256').update(applyAmendment028.toString(), 'utf8').digest('hex');
-  if (amendment028TransformationSha256 !== 'fd65eb23631cdef54dc23b2dffb7f12b5748841fa60915b22a27f80dbff4ef03') throw new Error('R181 Amendment 029 detected byte drift in applyAmendment028 transformation');
+  const amendment028TransformationSource = applyAmendment028.toString().replace(/\r\n/g, '\n');
+  if (amendment028TransformationSource.includes('\r')) throw new Error('R181 Amendment 029 detected unsupported carriage returns in applyAmendment028 transformation');
+  const amendment028TransformationSha256 = createHash('sha256').update(amendment028TransformationSource, 'utf8').digest('hex');
+  if (amendment028TransformationSha256 !== 'fd65eb23631cdef54dc23b2dffb7f12b5748841fa60915b22a27f80dbff4ef03') throw new Error('R181 Amendment 029 detected byte drift in canonical applyAmendment028 transformation');
 
   const amendment029FailureCodes = [
     'opencode_export_invalid_json',
