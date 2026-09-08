@@ -164,6 +164,8 @@ mark(record, 'opencode_sanitized_export_identity_exact')
 
 `opencode_bounded_tool_write_smoke` remained false. Because `mark(...)` is monotonic and is executed before the export command, the macOS failure occurred before that bounded-smoke mark. The run therefore did not establish that the sanitized-export command, JSON parse, or Amendment 026 validator was reached.
 
+The already-true `opencode_requested_identity_exact` fact is established only after the generated candidate dereferences `opencodeResult.identity.requestedProvider` and `opencodeResult.identity.requestedModel` and verifies both against the canonical strategy. `opencodeResult` and its `identity` object are not reassigned before the later `sessionId` predicate. Therefore an absent or null `identity` object is outside the proven macOS interval. Amendment 030 does not authorize adding a new identity-object guard or mapping an earlier missing-identity failure to `opencode_missing_session_id`; that fixed code may apply only to the existing falsy `sessionId` predicate on the already-established identity object.
+
 The `failed_at` value is derived from the first false entry in `REQUIRED_FACTS`, not from an execution-stage trace. `opencode_sanitized_export_identity_exact` precedes later OpenCode facts in that array even where execution order differs. This amendment records that distinction without changing the required-fact schema or order.
 
 The macOS failure is therefore bounded to either the existing missing-session-id rejection or an exception/rejection inside the first `verifyExactSmoke(opencodeRepo, opencodeBefore)` call. The evidence does not establish which subcondition rejected.
@@ -211,10 +213,10 @@ No other repository path is authorized.
 The later implementation may only classify existing generic failure boundaries inside:
 
 1. `requireExactPiWriteEvidence(...)` as reached after `pi_first_request_shaper_witness_exact` and before `pi_bounded_tool_write_smoke`;
-2. `verifyExactSmoke(...)`, including bounded conversion of direct snapshot/stat/read exceptions to fixed content-free codes;
-3. the existing OpenCode missing-session-id rejection immediately before the first OpenCode `verifyExactSmoke(...)` call.
+2. exactly two `verifyExactSmoke(...)` executions: the Linux `verifyExactSmoke(piSmokeRepo, piSmokeBefore)` call between `pi_first_request_shaper_witness_exact` and `pi_bounded_tool_write_smoke`, and the first macOS `verifyExactSmoke(opencodeRepo, opencodeBefore)` call before `opencode_bounded_tool_write_smoke`; the later macOS call after export/parse/identity validation and every other `verifyExactSmoke(...)` call are outside Amendment 030 authority;
+3. the existing OpenCode falsy-`sessionId` rejection immediately before the first OpenCode `verifyExactSmoke(...)` call, on the already-established `opencodeResult.identity` object.
 
-The implementation must not change any acceptance/rejection predicate, call order, fact order, process behavior, timeout, provider/model identity, prompt, tool, permission, filesystem target, workflow, or dependency.
+Diagnostics must preserve fail-closed control flow exactly. An existing rejection may be changed only to throw its authorized fixed code, and a direct snapshot/stat/read exception at one of the two authorized `verifyExactSmoke(...)` executions may be caught only to immediately throw the corresponding fixed code. No diagnostic catch may suppress a failure, continue execution, return success, alter a return value, or move the stop point. The implementation must preserve every existing rejection/exception outcome, call order, fact order, process behavior, timeout, provider/model identity, prompt, tool, permission, filesystem target, workflow, and dependency boundary.
 
 ## Authorized fixed-code vocabulary
 
@@ -262,19 +264,20 @@ The later one-file implementation PR must prove at minimum:
 5. the pre-Amendment-030 candidate contains none of the new Amendment 030 fixed codes;
 6. every new fixed code is declared exactly once in the bounded failure vocabulary;
 7. every existing `requireExactPiWriteEvidence(...)` predicate is unchanged and maps to the exact corresponding fixed code above;
-8. direct `snapshotRepository(...)`, `lstatSync(...)`, and `readFile(...)` exceptions inside `verifyExactSmoke(...)` map only to their fixed content-free diagnostic codes;
-9. every existing explicit `verifyExactSmoke(...)` predicate remains unchanged and maps to the exact corresponding fixed code above;
-10. the existing OpenCode missing-session-id predicate remains unchanged and maps only to `opencode_missing_session_id`;
-11. all prior Amendment 013–029 positive self-tests retain their exact normalized evidence behavior;
-12. deterministic negative fixtures cover every new fixed code;
-13. sentinel credentials, headers, paths, repository status strings, process-result strings, transcript content, session/message IDs, model prose, and tool arguments never appear in serialized machine-record output;
-14. arbitrary unknown exception text still maps only to `unclassified_internal_failure`;
-15. `REQUIRED_FACTS`, their order, the schema `delethos.spec003.r181-provider-prereq.v1`, and `failed_at` derivation remain unchanged;
-16. Pi/OpenCode runtime versions, provider/model pins, llama.cpp release/commit, model bytes/digests/URLs, prompts, templates, timeout values, tools, permissions, write target, environment behavior, process supervision, workflow semantics, and provider required facts remain unchanged;
-17. `OPENCODE_DISABLE_AUTOCOMPACT: '1'`, `amendment_028_opencode_autocompact`, Amendment 029 fixed-code mappings, and aggregate evidence metadata remain unchanged;
-18. no dependency is added;
-19. reverse transformation restores the complete pre-Amendment-030 generated candidate byte-for-byte;
-20. provider/Gold/real-agent jobs remain skipped on pull-request code.
+8. direct `snapshotRepository(...)`, `lstatSync(...)`, and `readFile(...)` exceptions map to fixed content-free diagnostic codes only when reached through the two specifically authorized `verifyExactSmoke(...)` executions; those exceptions at every other call site retain exact pre-Amendment-030 behavior;
+9. every existing explicit `verifyExactSmoke(...)` predicate remains byte-for-byte semantically unchanged, maps to the corresponding fixed code only at those two authorized executions, and remains unmodified in effect at the later post-export macOS call and all other call sites;
+10. the existing OpenCode falsy-`sessionId` predicate remains unchanged and maps only to `opencode_missing_session_id`; the already-established identity-object invariant is preserved and no new broader identity guard is authorized;
+11. every diagnostic mapping preserves the original rejection or exception outcome and exact stop point; no catch suppresses, continues past, or converts a failure into a success or partial continuation;
+12. all prior Amendment 013–029 positive self-tests retain their exact normalized evidence behavior;
+13. deterministic negative fixtures cover every new fixed code, including every direct snapshot/stat/read exception path at the two authorized `verifyExactSmoke(...)` executions and the falsy-`sessionId` path;
+14. sentinel credentials, headers, paths, repository status strings, process-result strings, transcript content, session/message IDs, model prose, and tool arguments never appear in serialized machine-record output;
+15. arbitrary unknown exception text still maps only to `unclassified_internal_failure`;
+16. `REQUIRED_FACTS`, their order, the schema `delethos.spec003.r181-provider-prereq.v1`, and `failed_at` derivation remain unchanged;
+17. Pi/OpenCode runtime versions, provider/model pins, llama.cpp release/commit, model bytes/digests/URLs, prompts, templates, timeout values, tools, permissions, write target, environment behavior, process supervision, workflow semantics, and provider required facts remain unchanged;
+18. `OPENCODE_DISABLE_AUTOCOMPACT: '1'`, `amendment_028_opencode_autocompact`, Amendment 029 fixed-code mappings, and aggregate evidence metadata remain unchanged;
+19. no dependency is added;
+20. reverse transformation restores the complete pre-Amendment-030 generated candidate byte-for-byte;
+21. provider/Gold/real-agent jobs remain skipped on pull-request code.
 
 ## Explicitly unauthorized changes
 
@@ -299,6 +302,9 @@ It does not authorize:
 - changing prompts, templates, timeouts, tools, permissions, environment policy, or write target;
 - exposing raw stdout/stderr, transcript, export content, repository status, filesystem paths, session/message IDs, credentials, headers, or arbitrary exception strings;
 - changing the Amendment 029 sanitized-export fixed-code mappings;
+- classifying the later post-export macOS `verifyExactSmoke(...)` call or any `verifyExactSmoke(...)` execution outside the two proven pre-mark intervals;
+- catching, suppressing, continuing past, or otherwise changing the stop point or outcome of an existing failure while adding diagnostics;
+- adding a broader `opencodeResult.identity` guard or reclassifying a pre-identity failure as `opencode_missing_session_id`;
 - speculative repair of Linux Pi behavior or macOS OpenCode behavior;
 - workflow changes or dependencies;
 - Gold promotion;
