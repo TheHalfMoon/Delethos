@@ -69,7 +69,7 @@ codex no-auth real = SKIPPED
 
 An earlier CodeRabbit substantive review was submitted on stale head `431368ea2d1af7a25cb970b367d34343215d34c0` and reported three Major findings. The branch was corrected forward to final head `3c27cb422ecfcec4d19e8d7699805e7f4e2a7cae`.
 
-CodeRabbit then independently verified the individual finding reconciliations on the new head and the associated review threads were resolved. Those follow-up thread checks are useful reconciliation evidence, but they are not the fresh exact-final-head review required by Amendment 030 items 5 and 6 because they did not perform the complete enumerated review scope over the final head.
+CodeRabbit then independently verified the individual finding reconciliations on the new head and the associated review threads were resolved. Those follow-up thread checks are useful reconciliation evidence, but they are not the fresh exact-final-head review required by Amendment 030 items 3 and 4 because they did not perform the complete enumerated review scope over the final head.
 
 A fresh full CodeRabbit review request on the exact final head was rate-limited before merge. Amendment 030 explicitly classifies rate-limited review systems as non-PASS.
 
