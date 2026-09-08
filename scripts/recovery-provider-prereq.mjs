@@ -1713,6 +1713,76 @@ function applyAmendment026(source) {
   return source;
 }
 
+function applyAmendment028(source) {
+  const originalSource = source;
+  const controlName = 'OPENCODE_DISABLE_AUTOCOMPACT';
+  if (source.includes(controlName)) throw new Error('R181 Amendment 028 precondition failed because the generated candidate already contained the autocompact control');
+
+  const validatorStartMarker = 'function extractOpenCodeIdentity(exportValue, sessionID) {';
+  const validatorEndMarker = 'function parsePiToolEvidence(stdout) {';
+  if ((source.split(validatorStartMarker).length - 1) !== 1 || (source.split(validatorEndMarker).length - 1) !== 1) throw new Error('R181 Amendment 028 could not bind the complete Amendment 026 lineage validator byte range');
+  const validatorStart = source.indexOf(validatorStartMarker);
+  const validatorEnd = source.indexOf(validatorEndMarker, validatorStart + validatorStartMarker.length);
+  if (validatorStart < 0 || validatorEnd <= validatorStart) throw new Error('R181 Amendment 028 lineage validator byte range was invalid');
+  const amendment026ValidatorBytes = source.slice(validatorStart, validatorEnd);
+
+  const previousEnvironmentEntry = "    OPENCODE_DISABLE_PRUNE: '1',";
+  const amendment028EnvironmentEntry = lines([
+    previousEnvironmentEntry,
+    "    OPENCODE_DISABLE_AUTOCOMPACT: '1',",
+  ]).trimEnd();
+  source = replaceOnce(source, previousEnvironmentEntry, amendment028EnvironmentEntry, 'Amendment 028 exact OpenCode autocompact isolation entry');
+
+  const selfTestAnchor = '    const env = piEnvironment(envRoot);';
+  const amendment028SelfTests = lines([
+    selfTestAnchor,
+    "    const amendment028OpenCodeEnvRoot = join(temp, 'opencode-amendment-028');",
+    "    mkdirSync(amendment028OpenCodeEnvRoot, { recursive: false });",
+    '    const amendment028OpenCodeEnv = openCodeEnvironment(amendment028OpenCodeEnvRoot);',
+    "    const amendment028RequireAutocompactDisabled = (values) => { if (!values || typeof values !== 'object' || Array.isArray(values) || values.OPENCODE_DISABLE_AUTOCOMPACT !== '1') throw new Error('Amendment 028 OpenCode environment did not disable autocompaction exactly'); return true; };",
+    '    amendment028RequireAutocompactDisabled(amendment028OpenCodeEnv.values);',
+    "    const amendment028Missing = { ...amendment028OpenCodeEnv.values }; delete amendment028Missing.OPENCODE_DISABLE_AUTOCOMPACT;",
+    "    const amendment028Renamed = { ...amendment028OpenCodeEnv.values, OPENCODE_DISABLE_AUTOCOMPACT_RENAMED: amendment028OpenCodeEnv.values.OPENCODE_DISABLE_AUTOCOMPACT }; delete amendment028Renamed.OPENCODE_DISABLE_AUTOCOMPACT;",
+    "    const amendment028Changed = { ...amendment028OpenCodeEnv.values, OPENCODE_DISABLE_AUTOCOMPACT: '0' };",
+    '    for (const invalid of [amendment028Missing, amendment028Renamed, amendment028Changed]) { let rejected = false; try { amendment028RequireAutocompactDisabled(invalid); } catch { rejected = true; } if (!rejected) throw new Error(\'Amendment 028 OpenCode environment negative control did not fail closed\'); }',
+  ]).trimEnd();
+  source = replaceOnce(source, selfTestAnchor, amendment028SelfTests, 'Amendment 028 effective OpenCode environment self-tests');
+
+  const requireExactEnvironmentSource = (candidate) => {
+    const environmentStartMarker = 'function openCodeEnvironment(root) {';
+    const environmentEndMarker = 'function buildPiR181Models(baseURL) {';
+    if ((candidate.split(environmentStartMarker).length - 1) !== 1 || (candidate.split(environmentEndMarker).length - 1) !== 1) throw new Error('R181 Amendment 028 OpenCode environment source boundary drifted');
+    const environmentStart = candidate.indexOf(environmentStartMarker);
+    const environmentEnd = candidate.indexOf(environmentEndMarker, environmentStart + environmentStartMarker.length);
+    if (environmentStart < 0 || environmentEnd <= environmentStart) throw new Error('R181 Amendment 028 OpenCode environment source range was invalid');
+    const environmentSource = candidate.slice(environmentStart, environmentEnd);
+    const exactEntry = "    OPENCODE_DISABLE_AUTOCOMPACT: '1',";
+    if ((environmentSource.split(exactEntry).length - 1) !== 1 || (environmentSource.match(/OPENCODE_DISABLE_AUTOCOMPACT/g) ?? []).length !== 1) throw new Error('R181 Amendment 028 OpenCode environment source entry was missing, duplicated, renamed, or value-drifted');
+  };
+  requireExactEnvironmentSource(source);
+  const exactEntry = "    OPENCODE_DISABLE_AUTOCOMPACT: '1',";
+  for (const mutant of [
+    source.replace(`${exactEntry}\n`, ''),
+    source.replace(exactEntry, "    OPENCODE_DISABLE_AUTOCOMPACT_RENAMED: '1',"),
+    source.replace(exactEntry, "    OPENCODE_DISABLE_AUTOCOMPACT: '0',"),
+    source.replace(exactEntry, `${exactEntry}\n${exactEntry}`),
+  ]) {
+    let rejected = false;
+    try { requireExactEnvironmentSource(mutant); } catch { rejected = true; }
+    if (!rejected) throw new Error('R181 Amendment 028 source-level autocompact discriminator negative control did not fail closed');
+  }
+
+  const validatorAfterStart = source.indexOf(validatorStartMarker);
+  const validatorAfterEnd = source.indexOf(validatorEndMarker, validatorAfterStart + validatorStartMarker.length);
+  if (validatorAfterStart < 0 || validatorAfterEnd <= validatorAfterStart || source.slice(validatorAfterStart, validatorAfterEnd) !== amendment026ValidatorBytes) throw new Error('R181 Amendment 028 changed the complete Amendment 026 lineage validator byte range');
+
+  let restored = source;
+  restored = replaceOnce(restored, amendment028SelfTests, selfTestAnchor, 'Amendment 028 restore effective OpenCode environment self-tests');
+  restored = replaceOnce(restored, amendment028EnvironmentEntry, previousEnvironmentEntry, 'Amendment 028 restore OpenCode environment entry');
+  if (restored !== originalSource) throw new Error('R181 Amendment 028 changed generated candidate beyond the authorized OpenCode autocompact isolation and deterministic self-tests');
+  return source;
+}
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
@@ -1758,13 +1828,15 @@ try {
   const amendment025Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment026(candidateSource);
   const amendment026Blob = gitBlobSha(candidateSource);
+  candidateSource = applyAmendment028(candidateSource);
+  const amendment028Blob = gitBlobSha(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
   }
   candidateSource = replaceOnce(candidateSource, 'const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));', `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`, 'repository root');
   writeFileSync(tempImplementation, candidateSource, { flag: 'w' });
-  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_026_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_022_blob: amendment022Blob, amendment_023_blob: amendment023Blob, amendment_024_blob: amendment024Blob, amendment_025_blob: amendment025Blob, amendment_026_blob: amendment026Blob, amendment_023_prompt_sha256: 'a80d61c9d848746309e541e01af89318925918bdd09a341d2fea5fd097c3ac4e', amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, amendment_024_provider_strategy_id: 'delethos-local-llama-qwen25-instruct', amendment_024_model_repository: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', amendment_024_model_revision: 'a615a81362316d7b9f5a7a9c4313adfdf9b54588', amendment_024_model_file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', amendment_024_model_sha256: '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e', amendment_024_model_id: 'delethos-qwen25-instruct-1.5b-q4km', amendment_025_pi_toolresult_text: 'Successfully wrote 17 bytes to delethos-r181-smoke.txt', runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability+runtime-source-normalization+layer-a-timeout-budget+layer-a-tool-call-first-prompt+model-baseline-replacement+exact-toolresult-continuation', opencode_evidence: 'temporary-qualification-config-model-identity-only+sanitized-export-canonical-lineage-bound-identity' }));
+  if (process.argv.length === 3 && process.argv[2] === '--self-test') console.log(JSON.stringify({ source: 'DETERMINISTIC_R181_AMENDMENT_028_DISCRIMINATOR', outcome: 'PASS', base_blob: EXPECTED_BASE_BLOB, amendment_010_blob: EXPECTED_AMENDMENT_010_BLOB, amendment_013_blob: amendment013Blob, amendment_014_blob: amendment014Blob, amendment_015_blob: amendment015Blob, amendment_016_blob: amendment016Blob, amendment_017_blob: amendment017Blob, amendment_018_blob: amendment018Blob, amendment_019_blob: amendment019Blob, amendment_020_blob: amendment020Blob, amendment_021_blob: amendment021Blob, amendment_022_blob: amendment022Blob, amendment_023_blob: amendment023Blob, amendment_024_blob: amendment024Blob, amendment_025_blob: amendment025Blob, amendment_026_blob: amendment026Blob, amendment_028_blob: amendment028Blob, amendment_023_prompt_sha256: 'a80d61c9d848746309e541e01af89318925918bdd09a341d2fea5fd097c3ac4e', amendment_020_template_blob: AMENDMENT_020_TEMPLATE_BLOB, amendment_024_provider_strategy_id: 'delethos-local-llama-qwen25-instruct', amendment_024_model_repository: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', amendment_024_model_revision: 'a615a81362316d7b9f5a7a9c4313adfdf9b54588', amendment_024_model_file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', amendment_024_model_sha256: '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e', amendment_024_model_id: 'delethos-qwen25-instruct-1.5b-q4km', amendment_025_pi_toolresult_text: 'Successfully wrote 17 bytes to delethos-r181-smoke.txt', amendment_028_opencode_autocompact: 'OPENCODE_DISABLE_AUTOCOMPACT=1', runtime_provenance: 'git-ls-remote+github-expanded-assets-exact-href+downloaded-byte-sha256', pi_evidence: 'durable-message-end+first-request-only-tool-choice+runtime-discriminator+stream-terminal-reconciliation+layer-a-budget+fixed-failure-codes+pinned-template-capability+runtime-source-normalization+layer-a-timeout-budget+layer-a-tool-call-first-prompt+model-baseline-replacement+exact-toolresult-continuation', opencode_evidence: 'temporary-qualification-config-model-identity-only+sanitized-export-canonical-lineage-bound-identity' }));
   const child = spawnSync(process.execPath, [tempImplementation, ...process.argv.slice(2)], { cwd: process.cwd(), env: process.env, stdio: 'inherit', shell: false });
   if (child.error) throw child.error;
   if (child.signal) throw new Error(`R181 candidate process terminated by signal ${child.signal}`);
