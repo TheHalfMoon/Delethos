@@ -78,7 +78,7 @@ Other review-system truth before merge was also non-PASS:
 ```text
 Qodo = BILLING_BLOCKED
 Cubic GitHub substantive review = MONTHLY_LINE_LIMIT_BLOCKED
-Cubic CLI substantive review = NOT_RUN_NO_AI_PROVIDER_CONFIGURED
+Cubic CLI substantive review = UNAVAILABLE_NO_AI_PROVIDER_CONFIGURED
 CodeRabbit exact-final-head full review = RATE_LIMITED
 submitted fresh complete independent substantive review on final head = NONE
 ```
@@ -225,27 +225,29 @@ No raw exception message, stdout/stderr, repository status, filesystem path, pro
 The later one-file implementation PR must prove at minimum:
 
 1. exactly one repository path changes: `scripts/recovery-provider-prereq.mjs`;
-2. the pre-Amendment-031 generated candidate is exactly Amendment 029 blob `879729a6b995bb4fef7112183fc2393cd233591a`;
-3. the complete `applyAmendment028(...)` transformation remains byte-for-byte unchanged;
-4. the complete `applyAmendment029(...)` transformation remains byte-for-byte unchanged;
-5. the existing Amendment 029 sixteen-code vocabulary and every existing sanitized-export diagnostic mapping remain unchanged;
-6. the twenty Amendment 031 codes are declared once each in the bounded fixed-code vocabulary;
-7. every existing `requireExactPiWriteEvidence(...)` acceptance/rejection predicate remains semantically unchanged and each existing generic rejection maps only to its corresponding fixed Pi code;
-8. diagnostics for `verifyExactSmoke(...)` apply only at the two specifically authorized executions and not through a global semantic change to every call site;
-9. direct `snapshotRepository(...)`, `lstatSync(...)`, and `readFile(...)` exceptions at those two executions map only to the corresponding fixed content-free code and immediately rethrow as a coded failure;
-10. every explicit repository-identity, missing-target, target-type, worktree-status, and content predicate at those two executions remains semantically unchanged and maps only to its corresponding fixed code;
-11. the later post-export macOS `verifyExactSmoke(...)` execution remains behaviorally identical to the pre-Amendment-031 candidate;
-12. the existing falsy-`sessionId` predicate remains semantically unchanged and maps only to `opencode_missing_session_id`;
-13. no broader `opencodeResult.identity` guard is introduced;
-14. every diagnostic mapping preserves the original failure outcome, call order, return behavior, and stop point;
-15. deterministic negative fixtures cover every new code, including direct snapshot/stat/read exception paths at both authorized `verifyExactSmoke(...)` executions and the falsy-`sessionId` path;
-16. all prior Amendment 013–029 positive and negative self-tests pass unchanged except where this amendment explicitly adds fixed-code assertions around previously generic boundaries;
-17. sentinel credentials, headers, paths, repository status strings, process-result strings, transcript content, session/message IDs, model prose, and tool arguments never appear in serialized machine-record output;
-18. arbitrary unknown exception text still maps only to `unclassified_internal_failure`;
-19. `REQUIRED_FACTS`, their order, schema `delethos.spec003.r181-provider-prereq.v1`, and `failed_at` derivation remain unchanged;
-20. all runtime/provider/model/CLI pins, files, digests, URLs, prompts, templates, timeouts, tools, permissions, environment semantics, and workflow semantics remain unchanged;
-21. no dependency is added and provider/Gold/real-agent jobs remain skipped on pull-request code;
-22. reverse transformation restores the exact pre-Amendment-031 generated candidate byte-for-byte.
+2. the complete `applyAmendment028(...)` transformation remains byte-for-byte unchanged and retains canonical LF SHA-256 `fd65eb23631cdef54dc23b2dffb7f12b5748841fa60915b22a27f80dbff4ef03`;
+3. the complete `applyAmendment029(...)` transformation remains byte-for-byte unchanged and retains canonical LF SHA-256 `480535c7a90761fd94313b09e54d78481279600a73d01fd286c8d793288b73af`;
+4. the pre-Amendment-031 generated candidate is exactly Amendment 029 blob `879729a6b995bb4fef7112183fc2393cd233591a`;
+5. the pre-Amendment-031 candidate contains none of the twenty Amendment 031 fixed codes;
+6. the existing Amendment 029 sixteen-code vocabulary and every existing sanitized-export diagnostic mapping remain unchanged;
+7. the twenty Amendment 031 codes are declared exactly once each in the bounded fixed-code vocabulary;
+8. every existing `requireExactPiWriteEvidence(...)` acceptance/rejection predicate remains semantically unchanged and each existing generic rejection maps only to its corresponding fixed Pi code;
+9. diagnostics for `verifyExactSmoke(...)` apply only at the two specifically authorized executions and not through a global semantic change to every call site;
+10. direct `snapshotRepository(...)`, `lstatSync(...)`, and `readFile(...)` exceptions at those two executions map only to the corresponding fixed content-free code and immediately rethrow as a coded failure;
+11. every explicit repository-identity, missing-target, target-type, worktree-status, and content predicate at those two executions remains semantically unchanged and maps only to its corresponding fixed code;
+12. the later post-export macOS `verifyExactSmoke(...)` execution remains behaviorally identical to the pre-Amendment-031 candidate;
+13. the existing falsy-`sessionId` predicate remains semantically unchanged and maps only to `opencode_missing_session_id`;
+14. no broader `opencodeResult.identity` guard is introduced;
+15. every diagnostic mapping preserves the original failure outcome, call order, return behavior, and stop point;
+16. deterministic negative fixtures cover every new code, including direct snapshot/stat/read exception paths at both authorized `verifyExactSmoke(...)` executions and the falsy-`sessionId` path;
+17. all prior Amendment 013–029 positive and negative self-tests pass unchanged except where this amendment explicitly adds fixed-code assertions around previously generic boundaries;
+18. sentinel credentials, headers, paths, repository status strings, process-result strings, transcript content, session/message IDs, model prose, and tool arguments never appear in serialized machine-record output;
+19. arbitrary unknown exception text still maps only to `unclassified_internal_failure`;
+20. `REQUIRED_FACTS`, their order, schema `delethos.spec003.r181-provider-prereq.v1`, and `failed_at` derivation remain unchanged;
+21. all runtime/provider/model/CLI pins, files, digests, URLs, prompts, templates, timeouts, tools, permissions, environment semantics, and workflow semantics remain unchanged;
+22. no dependency is added;
+23. provider/Gold/real-agent jobs remain skipped on pull-request code;
+24. reverse transformation restores the exact pre-Amendment-031 generated candidate byte-for-byte.
 
 ## Explicitly unauthorized implementation changes
 
