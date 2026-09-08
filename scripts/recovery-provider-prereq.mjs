@@ -2107,6 +2107,113 @@ function applyAmendment031(source) {
 }
 
 
+function applyAmendment032(source) {
+  const originalSource = source;
+  const preservedTransformations = [
+    ['Amendment 028', applyAmendment028, 'fd65eb23631cdef54dc23b2dffb7f12b5748841fa60915b22a27f80dbff4ef03'],
+    ['Amendment 029', applyAmendment029, '480535c7a90761fd94313b09e54d78481279600a73d01fd286c8d793288b73af'],
+    ['Amendment 031', applyAmendment031, 'a3764097e624cdcbfff873c13d8f89f7f78e2e5aa39df1847330cd4928f4069f'],
+  ];
+  for (const [label, transformation, expectedSha256] of preservedTransformations) {
+    const transformationSource = transformation.toString().replace(/\r\n/g, '\n');
+    if (transformationSource.includes('\r')) throw new Error(`R181 Amendment 032 detected unsupported carriage returns in ${label} transformation`);
+    if (createHash('sha256').update(transformationSource, 'utf8').digest('hex') !== expectedSha256) throw new Error(`R181 Amendment 032 detected byte drift in canonical ${label} transformation`);
+  }
+  if (gitBlobSha(originalSource) !== 'eae49312e18bca2d572119f09ff7519296427727') throw new Error('R181 Amendment 032 precondition failed because the generated Amendment 031 candidate blob drifted');
+
+  const amendment032FailureCodes = [
+    'opencode_smoke_content_missing_final_lf',
+    'opencode_smoke_content_crlf',
+    'opencode_smoke_content_extra_final_lf',
+    'opencode_smoke_content_utf8_bom',
+    'opencode_smoke_content_other_mismatch',
+  ];
+  for (const code of amendment032FailureCodes) if (originalSource.includes(code)) throw new Error('R181 Amendment 032 precondition failed because generated candidate already contained a new content diagnostic code');
+
+  const previousVocabularyTail = lines([
+    "  'opencode_missing_session_id',",
+    "  'unclassified_internal_failure',",
+  ]).trimEnd();
+  const amendment032VocabularyTail = lines([
+    "  'opencode_missing_session_id',",
+    ...amendment032FailureCodes.map((code) => `  '${code}',`),
+    "  'unclassified_internal_failure',",
+  ]).trimEnd();
+  source = replaceOnce(source, previousVocabularyTail, amendment032VocabularyTail, 'Amendment 032 fixed OpenCode content-shape vocabulary');
+
+  const helperSignatureBefore = 'async function verifyExactSmokeWithDiagnostics(repo, before, operations = null) {';
+  const helperSignatureAfter = 'async function verifyExactSmokeWithDiagnostics(repo, before, operations = null, contentMismatchClassifier = null) {';
+  source = replaceOnce(source, helperSignatureBefore, helperSignatureAfter, 'Amendment 032 optional content classifier parameter');
+
+  const contentPredicateBefore = "  if (content !== SMOKE_CONTENT) throw codedFailure('smoke_fixture_content_mismatch');";
+  const contentPredicateAfter = "  if (content !== SMOKE_CONTENT) throw codedFailure(contentMismatchClassifier === null ? 'smoke_fixture_content_mismatch' : contentMismatchClassifier(content));";
+  source = replaceOnce(source, contentPredicateBefore, contentPredicateAfter, 'Amendment 032 preserve exact-content predicate with bounded classifier');
+
+  const classifierAnchor = 'function piEnvironment(root) {';
+  const classifierAndAnchor = lines([
+    'function classifyOpenCodeSmokeContentMismatch(content) {',
+    "  if (content === 'DELETHOS_R181_OK') return 'opencode_smoke_content_missing_final_lf';",
+    "  if (content === 'DELETHOS_R181_OK\\r\\n') return 'opencode_smoke_content_crlf';",
+    "  if (content === 'DELETHOS_R181_OK\\n\\n') return 'opencode_smoke_content_extra_final_lf';",
+    "  if (content === '\\uFEFFDELETHOS_R181_OK\\n') return 'opencode_smoke_content_utf8_bom';",
+    "  return 'opencode_smoke_content_other_mismatch';",
+    '}',
+    '',
+    classifierAnchor,
+  ]).trimEnd();
+  source = replaceOnce(source, classifierAnchor, classifierAndAnchor, 'Amendment 032 OpenCode exact content-shape classifier');
+
+  const openCodeCallBefore = '    await verifyExactSmokeWithDiagnostics(opencodeRepo, opencodeBefore);';
+  const openCodeCallAfter = '    await verifyExactSmokeWithDiagnostics(opencodeRepo, opencodeBefore, null, classifyOpenCodeSmokeContentMismatch);';
+  source = replaceOnce(source, openCodeCallBefore, openCodeCallAfter, 'Amendment 032 first pre-mark OpenCode content classifier call site');
+
+  const selfTestAnchor = "  if (failureCode(new Error('amendment-031-unknown-exception-secret')) !== 'unclassified_internal_failure') throw new Error('Amendment 031 unknown exception did not preserve bounded fallback');";
+  const amendment032SelfTests = lines([
+    selfTestAnchor,
+    "  if (SMOKE_CONTENT !== 'DELETHOS_R181_OK\\n' || Buffer.byteLength(SMOKE_CONTENT, 'utf8') !== 17) throw new Error('Amendment 032 canonical smoke content drifted');",
+    `  const amendment032FailureCodes = ${JSON.stringify(amendment032FailureCodes)};`,
+    "  for (const code of amendment032FailureCodes) if (!FAILURE_REASON_CODES.has(code)) throw new Error('Amendment 032 fixed-code vocabulary self-test failed');",
+    "  await verifyExactSmokeWithDiagnostics('/amendment-032-canonical', amendment031SmokeBefore, amendment031SmokeOps, () => { throw new Error('Amendment 032 canonical content unexpectedly reached mismatch classifier'); });",
+    "  const amendment032ContentCases = [['DELETHOS_R181_OK','opencode_smoke_content_missing_final_lf'],['DELETHOS_R181_OK\\r\\n','opencode_smoke_content_crlf'],['DELETHOS_R181_OK\\n\\n','opencode_smoke_content_extra_final_lf'],['\\uFEFFDELETHOS_R181_OK\\n','opencode_smoke_content_utf8_bom'],['amendment-032-other-content-sentinel','opencode_smoke_content_other_mismatch']];",
+    "  for (const [content, expectedCode] of amendment032ContentCases) { let observed = null; try { await verifyExactSmokeWithDiagnostics('/amendment-032-opencode', amendment031SmokeBefore, { ...amendment031SmokeOps, readFile: async () => content }, classifyOpenCodeSmokeContentMismatch); } catch (error) { observed = failureCode(error); } if (observed !== expectedCode) throw new Error('Amendment 032 content-shape code mismatch: expected=' + expectedCode + ' observed=' + observed); }",
+    "  const amendment032RawContentSentinel = 'amendment-032-raw-content-must-not-serialize'; let amendment032RawContentReason = null; try { await verifyExactSmokeWithDiagnostics('/amendment-032-raw-content', amendment031SmokeBefore, { ...amendment031SmokeOps, readFile: async () => amendment032RawContentSentinel }, classifyOpenCodeSmokeContentMismatch); } catch (error) { amendment032RawContentReason = failureCode(error); } const amendment032RawContentProbe = { outcome: 'FAIL', failed_at: 'opencode_sanitized_export_identity_exact', failure_reason: amendment032RawContentReason }; validateFailureRecord(amendment032RawContentProbe); if (amendment032RawContentReason !== 'opencode_smoke_content_other_mismatch' || JSON.stringify(amendment032RawContentProbe).includes(amendment032RawContentSentinel)) throw new Error('Amendment 032 raw content escaped bounded classification');",
+    "  const amendment032LeakSentinels = ['Authorization: Bearer amendment-032-secret','credential=amendment-032-secret','/tmp/amendment-032-path','status-amendment-032','transcript-amendment-032','session-amendment-032','message-amendment-032','model-prose-amendment-032','{\\\"path\\\":\\\"tool-argument-amendment-032\\\"}'];",
+    "  for (let index = 0; index < amendment032LeakSentinels.length; index += 1) { const hostile = codedFailure(amendment032FailureCodes[index % amendment032FailureCodes.length]); hostile.message = amendment032LeakSentinels[index]; const probe = { outcome: 'FAIL', failed_at: 'opencode_sanitized_export_identity_exact', failure_reason: failureCode(hostile) }; validateFailureRecord(probe); if (JSON.stringify(probe).includes(amendment032LeakSentinels[index])) throw new Error('Amendment 032 machine record leaked untrusted content diagnostic material'); }",
+    "  if (failureCode(new Error('amendment-032-unknown-exception-secret')) !== 'unclassified_internal_failure') throw new Error('Amendment 032 unknown exception did not preserve bounded fallback');",
+  ]).trimEnd();
+  source = replaceOnce(source, selfTestAnchor, amendment032SelfTests, 'Amendment 032 deterministic content-shape and no-leak self-tests');
+
+  const vocabularyStart = source.indexOf('const FAILURE_REASON_CODES = new Set([');
+  const vocabularyEnd = source.indexOf(']);', vocabularyStart);
+  if (vocabularyStart < 0 || vocabularyEnd <= vocabularyStart) throw new Error('R181 Amendment 032 fixed-code vocabulary boundary drifted');
+  const vocabularySource = source.slice(vocabularyStart, vocabularyEnd);
+  for (const code of amendment032FailureCodes) if ((vocabularySource.split(`'${code}',`).length - 1) !== 1) throw new Error('R181 Amendment 032 content diagnostic code was not declared exactly once in bounded vocabulary');
+  if (source.includes(helperSignatureBefore) || (source.split(helperSignatureAfter).length - 1) !== 1) throw new Error('R181 Amendment 032 diagnostic helper signature drifted');
+  if (source.includes(contentPredicateBefore) || (source.split(contentPredicateAfter).length - 1) !== 1) throw new Error('R181 Amendment 032 exact-content predicate mapping drifted');
+  if ((source.match(/function classifyOpenCodeSmokeContentMismatch\(content\) \{/g) ?? []).length !== 1) throw new Error('R181 Amendment 032 OpenCode content classifier cardinality drifted');
+  if ((source.match(/await verifyExactSmokeWithDiagnostics\(piSmokeRepo, piSmokeBefore\);/g) ?? []).length !== 1) throw new Error('R181 Amendment 032 changed Pi diagnostic call behavior');
+  if ((source.split(openCodeCallAfter).length - 1) !== 1 || source.includes(openCodeCallBefore)) throw new Error('R181 Amendment 032 OpenCode content classifier call-site drifted');
+  const postExportCall = lines([
+    '    extractOpenCodeIdentity(exportValue, opencodeResult.identity.sessionId);',
+    '    exportValue = null;',
+    '    await verifyExactSmoke(opencodeRepo, opencodeBefore);',
+    "    mark(record, 'opencode_sanitized_export_identity_exact');",
+  ]).trimEnd();
+  if ((source.split(postExportCall).length - 1) !== 1) throw new Error('R181 Amendment 032 changed the excluded post-export OpenCode exact-smoke call');
+  if ((source.match(/if \(content !== SMOKE_CONTENT\)/g) ?? []).length !== 2) throw new Error('R181 Amendment 032 exact-content predicate cardinality drifted');
+
+  let restored = source;
+  restored = replaceOnce(restored, amendment032SelfTests, selfTestAnchor, 'Amendment 032 restore deterministic self-tests');
+  restored = replaceOnce(restored, openCodeCallAfter, openCodeCallBefore, 'Amendment 032 restore first pre-mark OpenCode call site');
+  restored = replaceOnce(restored, classifierAndAnchor, classifierAnchor, 'Amendment 032 restore OpenCode content classifier');
+  restored = replaceOnce(restored, contentPredicateAfter, contentPredicateBefore, 'Amendment 032 restore exact-content predicate mapping');
+  restored = replaceOnce(restored, helperSignatureAfter, helperSignatureBefore, 'Amendment 032 restore diagnostic helper signature');
+  restored = replaceOnce(restored, amendment032VocabularyTail, previousVocabularyTail, 'Amendment 032 restore failure vocabulary');
+  if (restored !== originalSource) throw new Error('R181 Amendment 032 changed generated candidate beyond authorized OpenCode content-shape diagnostics and deterministic self-tests');
+  return source;
+}
+
+
 const checkoutSource = readFileSync(IMPLEMENTATION_PATH, 'utf8');
 const canonicalSource = checkoutSource.replace(/\r\n/g, '\n');
 if (canonicalSource.includes('\r')) throw new Error('R181 canonical implementation contained unsupported carriage returns');
@@ -2157,6 +2264,7 @@ try {
   candidateSource = applyAmendment029(candidateSource);
   const amendment029Blob = gitBlobSha(candidateSource);
   candidateSource = applyAmendment031(candidateSource);
+  candidateSource = applyAmendment032(candidateSource);
   for (const [relativeSpecifier, label] of [['../packages/adapters/src/opencode.ts', 'OpenCode import'], ['../packages/adapters/src/pi.ts', 'Pi import'], ['../packages/runtime/src/process.ts', 'process supervisor import']]) {
     const absoluteURL = pathToFileURL(resolve(SCRIPT_DIR, relativeSpecifier)).href;
     candidateSource = replaceOnce(candidateSource, `'${relativeSpecifier}'`, `'${absoluteURL}'`, label);
