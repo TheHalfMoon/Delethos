@@ -18,7 +18,7 @@ export const PI_DEFINITION: AdapterDefinition = {
   },
 };
 
-type PiPrerequisiteToolMode = 'NO_TOOLS' | 'WRITE_ONLY';
+type PiPrerequisiteToolMode = 'NO_TOOLS' | 'READ_ONLY_TOOL' | 'WRITE_ONLY' | 'PARTIAL_WRITE_ONLY';
 
 const PI_WRITE_ONLY_SYSTEM_PROMPT = [
   'You are a deterministic file-writing agent.',
@@ -26,6 +26,21 @@ const PI_WRITE_ONLY_SYSTEM_PROMPT = [
   'Do not describe, simulate, or claim the write instead of calling the tool.',
   'Do not claim or imply that a file was written unless the write tool has returned success.',
   'After a successful write tool result, do not call any tool again; reply with a short confirmation.',
+].join(' ');
+
+const PI_READ_ONLY_SYSTEM_PROMPT = [
+  'You are a deterministic fixture-reading agent.',
+  'For the current request, your first assistant response must be exactly one call to the available read tool and no natural-language text.',
+  'Do not describe, simulate, or invent file contents instead of calling the tool.',
+  'After a successful read tool result, do not call any tool again; answer only from the returned file content.',
+].join(' ');
+
+const PI_PARTIAL_WRITE_SYSTEM_PROMPT = [
+  'You are a deterministic partial-diff conformance agent.',
+  'Your first assistant response must be exactly one call to the available write tool and no natural-language text.',
+  'Do not describe, simulate, or claim the write instead of calling the tool.',
+  'After the write tool returns success, do not call any tool again.',
+  'Then produce a long plain-text confirmation so the supervising harness can cancel the real process after independently observing the write.',
 ].join(' ');
 
 type ConformanceRunRequest = Omit<AdapterRunRequest, 'environmentPolicy'> & {
@@ -76,8 +91,8 @@ function requirePiIsolation(request: AdapterRunRequest): void {
 function validatePrerequisiteToolMode(request: AdapterRunRequest, productDispatch: boolean, prerequisiteToolMode: unknown): PiPrerequisiteToolMode | undefined {
   if (prerequisiteToolMode === undefined) return undefined;
   if (productDispatch) throw new TypeError('Pi prerequisite tool mode is conformance-only');
-  if (prerequisiteToolMode !== 'NO_TOOLS' && prerequisiteToolMode !== 'WRITE_ONLY') {
-    throw new TypeError('Pi prerequisite tool mode must be NO_TOOLS or WRITE_ONLY');
+  if (prerequisiteToolMode !== 'NO_TOOLS' && prerequisiteToolMode !== 'READ_ONLY_TOOL' && prerequisiteToolMode !== 'WRITE_ONLY' && prerequisiteToolMode !== 'PARTIAL_WRITE_ONLY') {
+    throw new TypeError('Pi prerequisite tool mode must be NO_TOOLS or WRITE_ONLY or READ_ONLY_TOOL or PARTIAL_WRITE_ONLY');
   }
   if (request.posture !== 'WRITE') throw new TypeError(`Pi ${prerequisiteToolMode} prerequisite tool mode requires WRITE posture`);
   return prerequisiteToolMode;
@@ -113,8 +128,12 @@ function buildPiInvocationCore(
   ];
   if (boundedPrerequisiteToolMode === 'NO_TOOLS') {
     args.push('--no-tools');
+  } else if (boundedPrerequisiteToolMode === 'READ_ONLY_TOOL') {
+    args.push('--tools', 'read', '--system-prompt', PI_READ_ONLY_SYSTEM_PROMPT);
   } else if (boundedPrerequisiteToolMode === 'WRITE_ONLY') {
     args.push('--tools', 'write', '--system-prompt', PI_WRITE_ONLY_SYSTEM_PROMPT);
+  } else if (boundedPrerequisiteToolMode === 'PARTIAL_WRITE_ONLY') {
+    args.push('--tools', 'write', '--system-prompt', PI_PARTIAL_WRITE_SYSTEM_PROMPT);
   }
   if (request.provider !== undefined && request.model !== undefined) args.push('--provider', request.provider, '--model', request.model);
 
@@ -136,6 +155,15 @@ export function buildPiInvocation(request: AdapterRunRequest, discovery: Adapter
 
 export function buildPiConformanceInvocation(request: ConformanceRunRequest, discovery: AdapterDiscovery): InvocationPlan {
   return buildPiInvocationCore(normalizeConformanceRequest(request), discovery, false, request.prerequisiteToolMode);
+}
+
+function planWithOneExplicitConformanceExtension(plan: InvocationPlan, extensionPath: string): InvocationPlan {
+  if (!isAbsolute(extensionPath)) throw new TypeError('Pi conformance extension path must be absolute');
+  const separators = plan.args.flatMap((value, index) => value === '--' ? [index] : []);
+  if (separators.length !== 1) throw new TypeError('Pi conformance plan requires exactly one prompt separator');
+  if (plan.args.includes('--extension') || plan.args.includes('-e')) throw new TypeError('Pi conformance plan already contains an explicit extension');
+  const separator = separators[0]!;
+  return { ...plan, args: [...plan.args.slice(0, separator), '--extension', extensionPath, ...plan.args.slice(separator)] };
 }
 
 interface ParsedPi {
@@ -239,6 +267,24 @@ function runPiWithPlan(request: AdapterRunRequest, discovery: AdapterDiscovery, 
 export function runPi(request: ConformanceRunRequest, discovery: AdapterDiscovery) {
   const normalized = normalizeConformanceRequest(request);
   return runPiWithPlan(normalized, discovery, buildPiInvocationCore(normalized, discovery, false, request.prerequisiteToolMode));
+}
+
+// Conformance-only path for one explicitly supplied Pi request-shaping extension. The supplied plan must be byte-for-byte equivalent to the canonical conformance plan after removing exactly one `--extension <absolute-path>` pair.
+export function runPiConformancePlan(request: ConformanceRunRequest, discovery: AdapterDiscovery, plan: InvocationPlan) {
+  const normalized = normalizeConformanceRequest(request);
+  const canonical = buildPiInvocationCore(normalized, discovery, false, request.prerequisiteToolMode);
+  const extensionIndexes = plan.args.flatMap((value, index) => value === '--extension' ? [index] : []);
+  if (extensionIndexes.length !== 1) throw new TypeError('Pi conformance shaped plan requires exactly one explicit extension');
+  const extensionIndex = extensionIndexes[0]!;
+  const extensionPath = plan.args[extensionIndex + 1];
+  if (!extensionPath || !isAbsolute(extensionPath)) throw new TypeError('Pi conformance shaped plan extension must be absolute');
+  const stripped = { ...plan, args: [...plan.args.slice(0, extensionIndex), ...plan.args.slice(extensionIndex + 2)] };
+  if (JSON.stringify(stripped) !== JSON.stringify(canonical)) throw new TypeError('Pi conformance shaped plan drifted outside the single explicit extension boundary');
+  return runPiWithPlan(normalized, discovery, plan);
+}
+
+export function buildPiConformanceInvocationWithExtension(request: ConformanceRunRequest, discovery: AdapterDiscovery, extensionPath: string): InvocationPlan {
+  return planWithOneExplicitConformanceExtension(buildPiConformanceInvocation(request, discovery), extensionPath);
 }
 
 export function runPiQualified(request: AdapterRunRequest, discovery: AdapterDiscovery) {
