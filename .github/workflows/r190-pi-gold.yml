@@ -33,6 +33,9 @@ jobs:
           runtime: node@24
           install: false
 
+      - name: Create deterministic self-test sandbox
+        run: node -e "require('node:fs').mkdirSync(process.platform === 'win32' ? 'C:/delethos-r190-selftest' : '/tmp/delethos-r190-selftest', { recursive: true })"
+
       - name: Self-test bounded Pi Gold harness
         run: node scripts/recovery-pi-gold.mjs --self-test
 
