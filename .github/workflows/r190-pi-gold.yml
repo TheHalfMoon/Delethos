@@ -1,0 +1,64 @@
+name: R190 Pi Gold
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    name: r190 pi gold self-test / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm and Node 24
+        uses: pnpm/setup@v2
+        with:
+          version: 11.22.0
+          runtime: node@24
+          install: false
+
+      - name: Self-test bounded Pi Gold harness
+        run: node scripts/recovery-pi-gold.mjs --self-test
+
+  pi-gold:
+    name: pi gold / ${{ matrix.os }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == '[pi-gold]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout canonical main
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm and Node 24
+        uses: pnpm/setup@v2
+        with:
+          version: 11.22.0
+          runtime: node@24
+          install: false
+
+      - name: Execute bounded Pi Gold matrix
+        run: node scripts/recovery-pi-gold.mjs
