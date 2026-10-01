@@ -129,3 +129,15 @@ Benchmarks and comparative evaluations must publish task definitions, configurat
 ## 12. Founding restriction
 
 While `specs/CURRENT.md` names Specification 000 as active, no product runtime implementation is authorized. Founding work is limited to the governance, architecture, research, contract, security, roadmap, contribution, and evidence surfaces named by Specification 000.
+
+<!-- graft:start -->
+## Graft — repository context layer
+
+Use Graft (https://github.com/trailhq/Graft, `@nanonets/graft`) as local developer/agent repository-context and navigation tooling. Graft does not create active authority, runtime capability, adapter support, review independence, verification evidence, or product implementation authorization.
+
+If Graft is unavailable or the local `graft/` graph is absent/stale, run `graft init`, select the active agent(s), then run `graft build`. Before broad source exploration prefer `graft check`, `graft map`, `graft ask "<question>" --source`, `graft skeleton <file>`, `graft callers <symbol>`, and `graft grep "<literal>"`. After material code changes, run `graft build` again.
+
+Treat `graft/` as a local regenerable cache and do not commit it. Keep usage zero-cost; do not introduce paid model/API usage or unauthorized external egress.
+
+Graft output is cached/advisory context and may not override live canonical repository truth. It is never PASS/VERIFIED evidence, adapter qualification, reviewer independence, or closure evidence. Continue all exact-head, deterministic, test, Jev where applicable, Alibaba Open Code Review, CI, security, provenance, and active-spec gates. Never fabricate Graft output, execution, reviews, or evidence.
+<!-- graft:end -->
